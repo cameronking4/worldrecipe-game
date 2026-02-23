@@ -3,13 +3,8 @@
 import { useEffect, useState, Suspense, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { HUD } from '@/components/ui/HUD';
-import { DialogueModal } from '@/components/ui/DialogueModal';
-import { JournalPanel } from '@/components/ui/JournalPanel';
-import { InventoryPanel } from '@/components/ui/InventoryPanel';
-import { CookingUI } from '@/components/ui/CookingUI';
+import { FPSHUD } from '@/components/ui/FPSHUD';
 import { ToastContainer, AutosaveIndicator } from '@/components/ui/ToastNotifications';
-import { PortalTransition } from '@/components/ui/PortalTransition';
 import { useGameStore } from '@/lib/store/gameStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
@@ -25,8 +20,8 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     <div className="fixed inset-0 flex items-center justify-center bg-background">
       <div className="text-center">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <p className="text-lg font-medium text-foreground">Loading World Recipe...</p>
-        <p className="text-sm text-muted-foreground mt-2">Preparing your culinary adventure</p>
+        <p className="text-lg font-medium text-foreground">Loading Arena...</p>
+        <p className="text-sm text-muted-foreground mt-2">Preparing for battle</p>
       </div>
     </div>
   ),
@@ -177,7 +172,7 @@ function GamePageContent() {
   
   const isPaused = useGameStore((s) => s.isPaused);
   const setPaused = useGameStore((s) => s.setPaused);
-  const dialogueActive = useGameStore((s) => s.dialogueState.active);
+  const dialogueActive = false; // No dialogue in FPS mode
   const world = useWorldStore((s) => s.world);
   const setWorld = useWorldStore((s) => s.setWorld);
   const isLoading = useWorldStore((s) => s.isLoading);
@@ -342,27 +337,14 @@ function GamePageContent() {
         <GameCanvas />
       </Suspense>
       
-      {/* UI Overlays */}
-      <HUD />
-      <DialogueModal />
-      <JournalPanel />
-      <InventoryPanel />
-      <CookingUI />
-      
+      {/* FPS HUD */}
+      <FPSHUD />
+
       {/* Toast Notifications */}
       <ToastContainer />
-      
+
       {/* Autosave Indicator */}
       <AutosaveIndicator />
-      
-      {/* Portal Transition Animation */}
-      <PortalTransition />
-      
-      {/* Pause Menu */}
-      {isPaused && !dialogueActive && <PauseMenu />}
-      
-      {/* Dish Complete Ceremony */}
-      {showComplete && <DishCompleteCeremony onClose={() => setShowComplete(false)} />}
     </main>
   );
 }
