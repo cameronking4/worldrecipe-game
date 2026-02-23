@@ -62,7 +62,7 @@ export function IngredientPickup({ ingredient, position, onPickup }: IngredientP
     
     if (!Number.isFinite(distance)) return;
     
-    const inRange = distance < 2;
+    const inRange = distance < 2.8;
     
     if (inRange !== isHighlighted) {
       setIsHighlighted(inRange);
@@ -189,7 +189,7 @@ export function ItemPickup({ item, position, onPickup }: ItemPickupProps) {
       Math.pow(position[2] - playerPosition[2], 2)
     );
     
-    const inRange = distance < 2;
+    const inRange = distance < 2.8;
     
     if (inRange !== isHighlighted) {
       setIsHighlighted(inRange);
@@ -394,4 +394,3 @@ export function InteractableManager({
 }
 
 export default InteractableManager;
-

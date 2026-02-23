@@ -5,6 +5,7 @@ import { useGameStore } from '@/lib/store/gameStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePortalStore } from '@/lib/store/portalStore';
+import { useCombatStore } from '@/lib/store/combatStore';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card } from '@/components/ui/card';
@@ -141,6 +142,7 @@ function MiniMap() {
   const region = useWorldStore((s) => s.currentRegion);
   const world = useWorldStore((s) => s.world);
   const timeOfDay = useGameStore((s) => s.timeOfDay);
+  const enemies = useCombatStore((s) => s.enemies.filter((enemy) => enemy.alive));
   
   // POIs can be at region level or mapSpec level (AI may generate either)
   const pois = region ? [...(region.pois || []), ...(region.mapSpec?.pois || [])] : [];
@@ -371,6 +373,23 @@ function MiniMap() {
           );
         })}
         
+        {/* Enemy indicators */}
+        {enemies.map((enemy) => {
+          const mapX = 50 + (enemy.position[0] / mapSize) * 80;
+          const mapY = 50 + (enemy.position[2] / mapSize) * 80;
+          return (
+            <div
+              key={enemy.enemyId}
+              className="absolute w-2 h-2 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 border border-red-200 animate-pulse"
+              style={{
+                left: `${Math.max(8, Math.min(92, mapX))}%`,
+                top: `${Math.max(8, Math.min(92, mapY))}%`,
+              }}
+              title={enemy.name}
+            />
+          );
+        })}
+
         {/* Player indicator with direction */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-100 z-10"
@@ -420,6 +439,10 @@ function MiniMap() {
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-fuchsia-400 rounded-full" />
               <span className="text-white/80">NPCs</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-red-500 rounded-full border border-red-200" />
+              <span className="text-white/80">Hostiles</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-yellow-400 rounded-full ring-1 ring-yellow-300" />
@@ -478,6 +501,43 @@ function StaminaBar() {
             {Math.round(stamina)}/{maxStamina}
           </p>
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function CombatStatus() {
+  const hp = useCombatStore((s) => s.playerHealth);
+  const maxHp = useCombatStore((s) => s.maxPlayerHealth);
+  const ammoInMag = useCombatStore((s) => s.ammoInMag);
+  const reserveAmmo = useCombatStore((s) => s.reserveAmmo);
+  const kills = useCombatStore((s) => s.killCount);
+  const aiDirectorLine = useCombatStore((s) => s.aiDirectorLine);
+  const pointerLocked = useCombatStore((s) => s.pointerLocked);
+
+  return (
+    <Card className="hud-card px-3 py-2.5 bg-card/95 backdrop-blur-md border-red-500/30 w-72 shadow-lg">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-red-300 font-semibold">Combat HUD</span>
+          <span className="text-muted-foreground">Kills: {kills}</span>
+        </div>
+        <div className="h-2.5 bg-muted/50 rounded-full overflow-hidden shadow-inner">
+          <div
+            className="h-full bg-gradient-to-r from-red-500 to-orange-400 transition-all duration-300 rounded-full"
+            style={{ width: `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">HP {Math.max(0, Math.round(hp))}/{maxHp}</span>
+          <span className="text-muted-foreground">Ammo {ammoInMag}/{reserveAmmo}</span>
+        </div>
+        <div className="text-[11px] text-amber-100/90 bg-amber-900/30 border border-amber-500/20 rounded px-2 py-1">
+          {aiDirectorLine}
+        </div>
+        {!pointerLocked && (
+          <div className="text-[10px] text-cyan-300">Click world to lock aim cursor.</div>
+        )}
       </div>
     </Card>
   );
@@ -813,11 +873,19 @@ function ControlsHelp() {
         <div className="mt-2 pt-2 border-t border-border/50 space-y-1.5 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Move</span>
-            <div className="flex gap-1">
-              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">WASD</kbd>
-              <span className="text-muted-foreground">/</span>
-              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">↑↓←→</kbd>
-            </div>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">WASD</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Aim</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Mouse</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Fire</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">LMB</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Reload</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">R</kbd>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Sprint</span>
@@ -880,19 +948,19 @@ function GettingStartedTip() {
         <div className="space-y-2 text-xs text-amber-100">
           <div className="flex items-start gap-2">
             <span className="text-amber-400">1.</span>
-            <span><strong>Explore</strong> the map with WASD or Arrow keys</span>
+            <span><strong>Click to lock aim</strong> and move with WASD</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">2.</span>
-            <span><strong>Collect ingredients</strong> (glowing items) by pressing E or SPACE</span>
+            <span><strong>Shoot hostiles</strong> with left-click, then reload with R</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">3.</span>
-            <span><strong>Talk to NPCs</strong> (pink dots on map) for quests & trades</span>
+            <span><strong>Collect ingredients</strong> and press E to interact with NPCs</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">4.</span>
-            <span><strong>Trade</strong> with yellow-highlighted NPCs for special items</span>
+            <span><strong>Follow AI director tips</strong> and complete quest objectives</span>
           </div>
         </div>
         
@@ -901,6 +969,20 @@ function GettingStartedTip() {
         </div>
       </div>
     </Card>
+  );
+}
+
+function Crosshair() {
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+      <div className="relative w-7 h-7">
+        <div className="absolute left-1/2 top-0 h-2 w-[1px] -translate-x-1/2 bg-white/85" />
+        <div className="absolute left-1/2 bottom-0 h-2 w-[1px] -translate-x-1/2 bg-white/85" />
+        <div className="absolute top-1/2 left-0 h-[1px] w-2 -translate-y-1/2 bg-white/85" />
+        <div className="absolute top-1/2 right-0 h-[1px] w-2 -translate-y-1/2 bg-white/85" />
+        <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-300" />
+      </div>
+    </div>
   );
 }
 
@@ -956,6 +1038,7 @@ export function HUD() {
         <RegionDisplay />
         <StaminaBar />
         <DishProgress />
+        <CombatStatus />
       </div>
       
       {/* Top Right - Mini Map */}
@@ -985,6 +1068,9 @@ export function HUD() {
       
       {/* Center Bottom - Interaction Prompt */}
       <InteractionPrompt />
+
+      {/* Center - FPS crosshair */}
+      <Crosshair />
       
       {/* Decorative corner accents */}
       <div className="absolute top-0 left-0 w-32 h-32 border-l-2 border-t-2 border-primary/20 pointer-events-none" />

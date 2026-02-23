@@ -276,7 +276,7 @@ export function SingleNPCController({ npc, pois, onInteract }: NPCControllerProp
     
     if (!Number.isFinite(distance)) return;
     
-    const inRange = distance < 2.5;
+    const inRange = distance < 3.4;
     
     // Only update state if changed to avoid render loops
     if (inRange !== highlightedRef.current) {
@@ -358,4 +358,3 @@ export function NPCManager({ npcs, pois, onNPCInteract }: NPCManagerProps) {
 }
 
 export default NPCManager;
-
