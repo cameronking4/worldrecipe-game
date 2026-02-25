@@ -15,6 +15,7 @@ import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useSaveStore } from '@/lib/store/saveStore';
 import { useNotificationStore } from '@/lib/store/notificationStore';
+import { useCombatStore } from '@/lib/store/combatStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -191,6 +192,7 @@ function GamePageContent() {
   
   const showAutosave = useNotificationStore((s) => s.showAutosave);
   const showInfo = useNotificationStore((s) => s.showInfo);
+  const resetCombat = useCombatStore((s) => s.resetCombat);
   
   // Initialize game: load world and restore save
   useEffect(() => {
@@ -219,6 +221,7 @@ function GamePageContent() {
         const data = await res.json();
         
         if (data.world) {
+          resetCombat();
           setWorld(data.world);
           
           // Try to load existing save for this world
@@ -244,7 +247,7 @@ function GamePageContent() {
     };
     
     initializeGame();
-  }, [setWorld, loadLatestSave, searchParams, showInfo]);
+  }, [setWorld, loadLatestSave, resetCombat, searchParams, showInfo]);
   
   // Start autosave when playing
   useEffect(() => {

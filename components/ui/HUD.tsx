@@ -5,6 +5,7 @@ import { useGameStore } from '@/lib/store/gameStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePortalStore } from '@/lib/store/portalStore';
+import { useCombatStore } from '@/lib/store/combatStore';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card } from '@/components/ui/card';
@@ -820,8 +821,24 @@ function ControlsHelp() {
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Look</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Mouse</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Shoot</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">LMB</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Reload</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">R</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Sprint</span>
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Shift</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Jump</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Space</kbd>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Interact</span>
@@ -880,19 +897,19 @@ function GettingStartedTip() {
         <div className="space-y-2 text-xs text-amber-100">
           <div className="flex items-start gap-2">
             <span className="text-amber-400">1.</span>
-            <span><strong>Explore</strong> the map with WASD or Arrow keys</span>
+            <span><strong>Click screen</strong> to lock cursor, then aim with mouse</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">2.</span>
-            <span><strong>Collect ingredients</strong> (glowing items) by pressing E or SPACE</span>
+            <span><strong>Hold lanes</strong> against spice wisps with left click and R to reload</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">3.</span>
-            <span><strong>Talk to NPCs</strong> (pink dots on map) for quests & trades</span>
+            <span><strong>Collect ingredients</strong> and interact with NPCs using E</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">4.</span>
-            <span><strong>Trade</strong> with yellow-highlighted NPCs for special items</span>
+            <span><strong>Use AI radio cues</strong> for real-time tactical hints</span>
           </div>
         </div>
         
@@ -941,6 +958,149 @@ function FPSCounter() {
 }
 
 // ============================================
+// FPS Crosshair + Combat HUD
+// ============================================
+function Crosshair() {
+  return (
+    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+      <div className="relative w-8 h-8">
+        <div className="absolute left-1/2 top-0 h-2 w-0.5 -translate-x-1/2 bg-white/90" />
+        <div className="absolute left-1/2 bottom-0 h-2 w-0.5 -translate-x-1/2 bg-white/90" />
+        <div className="absolute top-1/2 left-0 w-2 h-0.5 -translate-y-1/2 bg-white/90" />
+        <div className="absolute top-1/2 right-0 w-2 h-0.5 -translate-y-1/2 bg-white/90" />
+        <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/90 bg-cyan-200/30" />
+      </div>
+    </div>
+  );
+}
+
+function CombatPanel() {
+  const health = useCombatStore((s) => s.health);
+  const maxHealth = useCombatStore((s) => s.maxHealth);
+  const ammoInMag = useCombatStore((s) => s.ammoInMag);
+  const reserveAmmo = useCombatStore((s) => s.reserveAmmo);
+  const kills = useCombatStore((s) => s.kills);
+  const score = useCombatStore((s) => s.score);
+  const pointerLocked = useCombatStore((s) => s.pointerLocked);
+  const isReloading = useCombatStore((s) => s.isReloading);
+  const resetCombat = useCombatStore((s) => s.resetCombat);
+
+  const healthPercent = Math.max(0, Math.min(100, (health / maxHealth) * 100));
+
+  return (
+    <Card className="hud-card w-60 bg-card/95 backdrop-blur-md border-primary/20 p-3 shadow-xl">
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-foreground">FPS Ops</span>
+          <span className={pointerLocked ? 'text-emerald-400' : 'text-amber-300'}>
+            {pointerLocked ? 'LOCKED' : 'CLICK TO LOCK'}
+          </span>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Health</span>
+            <span>{Math.round(health)}/{maxHealth}</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-200 ${health > 35 ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}
+              style={{ width: `${healthPercent}%` }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-cyan-200">Ammo {ammoInMag}</span>
+          <span className="text-muted-foreground">/{reserveAmmo}</span>
+          {isReloading && <span className="text-[11px] text-amber-300">Reloading...</span>}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>Kills: {kills}</span>
+          <span>Score: {score}</span>
+        </div>
+        {health <= 0 && (
+          <Button className="w-full h-8 text-xs" onClick={resetCombat}>
+            Redeploy
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function CombatRadio() {
+  const [line, setLine] = useState('Radio online. Engage spice wisps and hold the lane.');
+  const [mood, setMood] = useState<'calm' | 'urgent' | 'hype'>('calm');
+
+  const lastEvent = useCombatStore((s) => s.lastEvent);
+  const health = useCombatStore((s) => s.health);
+  const ammoInMag = useCombatStore((s) => s.ammoInMag);
+  const kills = useCombatStore((s) => s.kills);
+  const world = useWorldStore((s) => s.world);
+  const region = useWorldStore((s) => s.currentRegion);
+
+  const lastRequestAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRequestAtRef.current < 3500 && lastEvent.type !== 'critical_health') return;
+    lastRequestAtRef.current = now;
+
+    let aborted = false;
+
+    const run = async () => {
+      try {
+        const response = await fetch('/api/ai/combat/chatter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: lastEvent.type,
+            context: {
+              dishName: world?.dish.name,
+              regionName: region?.name,
+              kills,
+              health,
+              ammo: ammoInMag,
+            },
+          }),
+        });
+
+        const data = await response.json();
+        if (!aborted && data?.line) {
+          setLine(data.line);
+          setMood(data.mood || 'calm');
+        }
+      } catch {
+        if (!aborted) {
+          setLine('Comms unstable. Stay mobile and control distance.');
+          setMood('urgent');
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      aborted = true;
+    };
+  }, [ammoInMag, health, kills, lastEvent, region?.name, world?.dish.name]);
+
+  const moodStyle =
+    mood === 'hype'
+      ? 'border-cyan-400/40 text-cyan-200'
+      : mood === 'urgent'
+        ? 'border-red-400/40 text-red-200'
+        : 'border-emerald-400/40 text-emerald-200';
+
+  return (
+    <Card className={`hud-card max-w-xl px-4 py-2 bg-card/90 backdrop-blur-md ${moodStyle}`}>
+      <p className="text-xs font-medium tracking-wide">AI RADIO</p>
+      <p className="text-sm">{line}</p>
+    </Card>
+  );
+}
+
+// ============================================
 // Main HUD Component
 // ============================================
 export function HUD() {
@@ -976,15 +1136,28 @@ export function HUD() {
       <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
         <GettingStartedTip />
       </div>
+
+      {/* Upper Center - AI Combat Radio */}
+      <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none">
+        <CombatRadio />
+      </div>
       
       {/* Bottom Left - Quick Actions & Controls */}
       <div className="absolute bottom-4 left-4 space-y-2 pointer-events-auto">
         <QuickActions />
         <ControlsHelp />
       </div>
+
+      {/* Bottom Right - FPS Combat Stats */}
+      <div className="absolute bottom-4 right-4 pointer-events-auto">
+        <CombatPanel />
+      </div>
       
       {/* Center Bottom - Interaction Prompt */}
       <InteractionPrompt />
+
+      {/* Center - FPS Crosshair */}
+      <Crosshair />
       
       {/* Decorative corner accents */}
       <div className="absolute top-0 left-0 w-32 h-32 border-l-2 border-t-2 border-primary/20 pointer-events-none" />

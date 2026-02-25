@@ -25,6 +25,7 @@ import { VoxelTerrain } from './VoxelTerrain';
 import { NPCManager } from './NPCController';
 import { InteractableManager } from './Interactable';
 import { PortalBoard } from './PortalBoard';
+import { EnemyManager } from './EnemyController';
 import { useGameStore } from '@/lib/store/gameStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
@@ -723,6 +724,7 @@ function SceneContent() {
       >
         <WorldContent />
         <PlayerController />
+        <EnemyManager />
       </Physics>
       
       <PostProcessingEffects />
@@ -812,7 +814,7 @@ export function GameCanvas() {
         camera={{
           near: 0.1,
           far: 200,
-          fov: 50,
+          fov: 74,
         }}
         onCreated={(state) => {
           state.gl.setClearColor(skyColor);
