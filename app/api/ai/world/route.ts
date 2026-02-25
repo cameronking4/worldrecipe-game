@@ -494,6 +494,37 @@ function createFallbackWorld() {
         accessoryTags: ['fishing_hat', 'net'],
       },
     },
+    {
+      npcId: 'npc_merchant_mina',
+      name: 'Mina',
+      speciesStyle: 'Traveling spice merchant',
+      personality: {
+        archetype: 'Trader',
+        traits: ['curious', 'sharp', 'friendly'],
+        speakingStyle: 'Quick and lively, always has a tip to share',
+        likes: ['rare spices', 'fair deals', 'market gossip'],
+        dislikes: ['haggling without respect', 'stale ingredients'],
+      },
+      role: {
+        job: 'Merchant',
+        services: ['ingredient trades', 'market rumors', 'flavor advice'],
+      },
+      schedule: [
+        { timeOfDay: 'morning' as const, locationId: 'poi_market', activity: 'Setting up spice stall' },
+        { timeOfDay: 'day' as const, locationId: 'poi_market', activity: 'Trading ingredients and stories' },
+        { timeOfDay: 'evening' as const, locationId: 'poi_kitchen', activity: 'Delivering special orders' },
+      ],
+      relationship: {
+        startingLevel: 0,
+        maxLevel: 9,
+        levelRewards: ['Discounted trades', 'Rare spice leads', 'Merchant network access'],
+      },
+      questHooks: [],
+      visual: {
+        outfitTags: ['vest', 'trader_sash'],
+        accessoryTags: ['coin_pouch', 'spice_crate'],
+      },
+    },
   ];
   
   const portalBoards = createPortalBoards(worldId, ingredients, npcRoster);
@@ -569,6 +600,7 @@ function createFallbackWorld() {
             npcSpawns: [
               { npcId: 'npc_chef_hana', position: { x: 20, y: 25 } },
               { npcId: 'npc_fisher_kai', position: { x: 30, y: 20 } },
+              { npcId: 'npc_merchant_mina', position: { x: 10, y: 15 } },
             ],
           },
           decorRules: { density: 0.3, propThemes: ['coastal', 'fishing'] },
@@ -644,4 +676,3 @@ function createFallbackWorld() {
     startingInventory: [],
   };
 }
-
