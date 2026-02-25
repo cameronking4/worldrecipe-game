@@ -39,6 +39,13 @@ interface PlayerState {
   // Stats
   stamina: number;
   maxStamina: number;
+  health: number;
+  maxHealth: number;
+  ammo: number;
+  magazineSize: number;
+  reserveAmmo: number;
+  kills: number;
+  lastDamageAt: number | null;
   
   // Actions
   setPosition: (pos: [number, number, number]) => void;
@@ -73,6 +80,15 @@ interface PlayerState {
   // Stamina actions
   useStamina: (amount: number) => boolean;
   restoreStamina: (amount: number) => void;
+  
+  // Combat actions
+  takeDamage: (amount: number) => void;
+  heal: (amount: number) => void;
+  shoot: () => boolean;
+  reload: () => boolean;
+  addReserveAmmo: (amount: number) => void;
+  registerKill: () => void;
+  resetCombat: () => void;
   
   // Collected items actions
   markCollected: (itemId: string) => void;
@@ -114,6 +130,13 @@ const initialState = {
   
   stamina: 100,
   maxStamina: 100,
+  health: 100,
+  maxHealth: 100,
+  ammo: 24,
+  magazineSize: 24,
+  reserveAmmo: 96,
+  kills: 0,
+  lastDamageAt: null,
 };
 
 export const usePlayerStore = create<PlayerState>()(
@@ -329,6 +352,60 @@ export const usePlayerStore = create<PlayerState>()(
       set({ stamina: Math.min(maxStamina, stamina + amount) });
     },
     
+    takeDamage: (amount) => {
+      const { health } = get();
+      const next = Math.max(0, health - Math.max(0, amount));
+      set({
+        health: next,
+        lastDamageAt: Date.now(),
+      });
+    },
+    
+    heal: (amount) => {
+      const { health, maxHealth } = get();
+      set({ health: Math.min(maxHealth, health + Math.max(0, amount)) });
+    },
+    
+    shoot: () => {
+      const { ammo } = get();
+      if (ammo <= 0) return false;
+      set({ ammo: ammo - 1 });
+      return true;
+    },
+    
+    reload: () => {
+      const { ammo, magazineSize, reserveAmmo } = get();
+      if (ammo >= magazineSize || reserveAmmo <= 0) return false;
+      
+      const needed = magazineSize - ammo;
+      const used = Math.min(needed, reserveAmmo);
+      set({
+        ammo: ammo + used,
+        reserveAmmo: reserveAmmo - used,
+      });
+      return true;
+    },
+    
+    addReserveAmmo: (amount) => {
+      const safeAmount = Math.max(0, Math.floor(amount));
+      if (safeAmount === 0) return;
+      set((state) => ({
+        reserveAmmo: Math.min(999, state.reserveAmmo + safeAmount),
+      }));
+    },
+    
+    registerKill: () => {
+      set((state) => ({ kills: state.kills + 1 }));
+    },
+    
+    resetCombat: () => {
+      set((state) => ({
+        health: state.maxHealth,
+        ammo: state.magazineSize,
+        reserveAmmo: Math.max(state.reserveAmmo, 72),
+      }));
+    },
+    
     // Check and auto-update gather objectives when items are collected
     checkAndUpdateGatherObjectives: (itemId) => {
       const { activeQuests, inventory } = get();
@@ -431,10 +508,16 @@ export const usePlayerStore = create<PlayerState>()(
         collectedItemIds: state.collectedItemIds || [],
         npcConversationMemory: state.npcConversationMemory || {},
         npcRelationships: state.npcRelationships || {},
+        health: typeof state.health === 'number' ? state.health : get().maxHealth,
+        maxHealth: typeof state.maxHealth === 'number' ? state.maxHealth : get().maxHealth,
+        ammo: typeof state.ammo === 'number' ? state.ammo : get().magazineSize,
+        magazineSize: typeof state.magazineSize === 'number' ? state.magazineSize : get().magazineSize,
+        reserveAmmo: typeof state.reserveAmmo === 'number' ? state.reserveAmmo : get().reserveAmmo,
+        kills: typeof state.kills === 'number' ? state.kills : get().kills,
+        lastDamageAt: state.lastDamageAt ?? null,
       });
     },
     
     reset: () => set(initialState),
   }))
 );
-

@@ -130,6 +130,18 @@ Use the QuestResolution schema exactly:
 - Provide a friendly message
 - Link to next quest if applicable`;
 
+export const ENCOUNTER_SYSTEM_PROMPT = `You design light, playful FPS encounter flavor for "World Recipe".
+
+## Goal
+Create fast-paced but family-friendly enemy wave setups for a cozy stylized 3D game.
+
+## Rules
+- Keep tone adventurous, never scary or graphic
+- Enemies are whimsical food spirits, animated kitchen constructs, or folklore-inspired mascots
+- No gore, cruelty, or explicit violence
+- Hints should be tactical and clear
+- Output must follow schema exactly`;
+
 // ============================================
 // Prompt Builders
 // ============================================
@@ -280,6 +292,27 @@ export function buildDialoguePrompt(
   return parts.join('\n');
 }
 
+export function buildEncounterPrompt(input: {
+  dishName: string;
+  regionName: string;
+  regionInspiration: string;
+  timeOfDay: string;
+}): string {
+  return [
+    `Generate one FPS encounter setup for a cozy game.`,
+    `Dish: ${input.dishName}`,
+    `Region: ${input.regionName}`,
+    `Inspiration: ${input.regionInspiration}`,
+    `Time of day: ${input.timeOfDay}`,
+    ``,
+    `Design notes:`,
+    `- Keep enemies readable in a voxel-like stylized scene`,
+    `- Mix at least one fast and one durable enemy archetype`,
+    `- Taunts should be short and playful`,
+    `- objectiveHint should help the player survive and reload well`,
+  ].join('\n');
+}
+
 function getRelationshipDescription(level: number): string {
   if (level <= 0) return 'stranger';
   if (level <= 2) return 'acquaintance';
@@ -307,4 +340,3 @@ Determine:
 3. What encouraging message should be shown?
 4. Is the entire quest now complete?`;
 }
-

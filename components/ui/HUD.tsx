@@ -483,6 +483,41 @@ function StaminaBar() {
   );
 }
 
+function CombatPanel() {
+  const health = usePlayerStore((s) => s.health);
+  const maxHealth = usePlayerStore((s) => s.maxHealth);
+  const ammo = usePlayerStore((s) => s.ammo);
+  const reserveAmmo = usePlayerStore((s) => s.reserveAmmo);
+  const kills = usePlayerStore((s) => s.kills);
+
+  const hpPct = Math.max(0, Math.min(100, (health / maxHealth) * 100));
+
+  return (
+    <Card className="hud-card px-3 py-2.5 bg-card/95 backdrop-blur-md border-primary/20 w-52 shadow-lg">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-rose-300 font-semibold">HP</span>
+          <span className="text-foreground font-mono">{Math.round(health)}/{maxHealth}</span>
+        </div>
+        <div className="h-2.5 bg-muted/40 rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all duration-200 rounded-full ${hpPct > 40 ? 'bg-rose-500' : 'bg-red-600 animate-pulse'}`}
+            style={{ width: `${hpPct}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs pt-0.5">
+          <span className="text-cyan-300 font-semibold">Ammo</span>
+          <span className="text-foreground font-mono">{ammo}/{reserveAmmo}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-amber-300 font-semibold">Eliminations</span>
+          <span className="text-foreground font-mono">{kills}</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 // ============================================
 // Dish Progress Tracker
 // ============================================
@@ -828,6 +863,18 @@ function ControlsHelp() {
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">E</kbd>
           </div>
           <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Look / Aim</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Mouse</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Shoot</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">LMB</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Reload</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">R</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Pause</span>
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">ESC</kbd>
           </div>
@@ -880,19 +927,19 @@ function GettingStartedTip() {
         <div className="space-y-2 text-xs text-amber-100">
           <div className="flex items-start gap-2">
             <span className="text-amber-400">1.</span>
-            <span><strong>Explore</strong> the map with WASD or Arrow keys</span>
+            <span><strong>Click the world</strong> to lock mouse and enter FPS mode</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">2.</span>
-            <span><strong>Collect ingredients</strong> (glowing items) by pressing E or SPACE</span>
+            <span><strong>Move and aim</strong> with WASD + Mouse, shoot with left click</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">3.</span>
-            <span><strong>Talk to NPCs</strong> (pink dots on map) for quests & trades</span>
+            <span><strong>Collect ingredients</strong> (glowing items) by pressing E</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">4.</span>
-            <span><strong>Trade</strong> with yellow-highlighted NPCs for special items</span>
+            <span><strong>Talk to NPCs</strong> (pink dots on map) for AI quests & trades</span>
           </div>
         </div>
         
@@ -954,6 +1001,7 @@ export function HUD() {
       <div className="absolute top-4 left-4 space-y-2.5 pointer-events-auto">
         <TimeDisplay />
         <RegionDisplay />
+        <CombatPanel />
         <StaminaBar />
         <DishProgress />
       </div>
@@ -985,6 +1033,17 @@ export function HUD() {
       
       {/* Center Bottom - Interaction Prompt */}
       <InteractionPrompt />
+      
+      {/* Crosshair */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+        <div className="relative w-7 h-7">
+          <div className="absolute left-1/2 top-0 h-2 w-[2px] -translate-x-1/2 bg-cyan-300/90" />
+          <div className="absolute left-1/2 bottom-0 h-2 w-[2px] -translate-x-1/2 bg-cyan-300/90" />
+          <div className="absolute top-1/2 left-0 h-[2px] w-2 -translate-y-1/2 bg-cyan-300/90" />
+          <div className="absolute top-1/2 right-0 h-[2px] w-2 -translate-y-1/2 bg-cyan-300/90" />
+          <div className="absolute left-1/2 top-1/2 h-[3px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-100" />
+        </div>
+      </div>
       
       {/* Decorative corner accents */}
       <div className="absolute top-0 left-0 w-32 h-32 border-l-2 border-t-2 border-primary/20 pointer-events-none" />

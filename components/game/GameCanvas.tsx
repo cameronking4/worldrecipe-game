@@ -21,6 +21,7 @@ import { BlendFunction, ToneMappingMode } from 'postprocessing';
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier';
 import * as THREE from 'three';
 import { PlayerController } from './PlayerController';
+import { EncounterSystem } from './EncounterSystem';
 import { VoxelTerrain } from './VoxelTerrain';
 import { NPCManager } from './NPCController';
 import { InteractableManager } from './Interactable';
@@ -724,6 +725,7 @@ function SceneContent() {
         <WorldContent />
         <PlayerController />
       </Physics>
+      <EncounterSystem />
       
       <PostProcessingEffects />
     </>
