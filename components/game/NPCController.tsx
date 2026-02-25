@@ -31,6 +31,7 @@ function NPCVisual({ npc, isHighlighted }: NPCVisualProps) {
       'Farmer': '#32CD32',
       'Merchant': '#FFD700',
       'Elder': '#9370DB',
+      'Herbalist': '#7BC67E',
       'default': '#DEB887',
     };
     
@@ -119,6 +120,34 @@ function NPCVisual({ npc, isHighlighted }: NPCVisualProps) {
           <coneGeometry args={[0.25, 0.2, 8]} />
           <meshStandardMaterial color="#8B4513" roughness={0.9} />
         </mesh>
+      )}
+
+      {npc.role.job === 'Herbalist' && (
+        <>
+          {/* Flower crown */}
+          <mesh position={[0, 1.15, 0]} castShadow>
+            <torusGeometry args={[0.2, 0.04, 8, 16]} />
+            <meshStandardMaterial color="#2E7D32" roughness={0.7} />
+          </mesh>
+          {/* Flowers on crown */}
+          {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle, i) => (
+            <mesh
+              key={i}
+              position={[
+                Math.cos(angle) * 0.2,
+                1.18,
+                Math.sin(angle) * 0.2,
+              ]}
+              castShadow
+            >
+              <sphereGeometry args={[0.05, 6, 6]} />
+              <meshStandardMaterial
+                color={['#FF69B4', '#FFD700', '#FF6347', '#DA70D6'][i]}
+                roughness={0.5}
+              />
+            </mesh>
+          ))}
+        </>
       )}
       
       {/* Arms */}

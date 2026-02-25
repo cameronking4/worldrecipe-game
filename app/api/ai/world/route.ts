@@ -494,6 +494,37 @@ function createFallbackWorld() {
         accessoryTags: ['fishing_hat', 'net'],
       },
     },
+    {
+      npcId: 'npc_herbalist_mei',
+      name: 'Mei',
+      speciesStyle: 'Gentle herbalist with flower-adorned hair',
+      personality: {
+        archetype: 'Sage',
+        traits: ['curious', 'gentle', 'knowledgeable'],
+        speakingStyle: 'Soft-spoken and poetic, often references plants and seasons',
+        likes: ['rare herbs', 'rainy days', 'tea ceremonies'],
+        dislikes: ['pollution', 'carelessness with nature'],
+      },
+      role: {
+        job: 'Herbalist',
+        services: ['herb identification', 'seasoning trades', 'herbal remedies'],
+      },
+      schedule: [
+        { timeOfDay: 'morning' as const, locationId: 'poi_garden', activity: 'Tending to herb garden' },
+        { timeOfDay: 'day' as const, locationId: 'poi_market', activity: 'Selling dried herbs and spices' },
+        { timeOfDay: 'evening' as const, locationId: 'poi_shrine', activity: 'Meditating among the flowers' },
+      ],
+      relationship: {
+        startingLevel: 0,
+        maxLevel: 9,
+        levelRewards: ['Common herb guide', 'Rare seasoning blends', 'Ancient spice recipe'],
+      },
+      questHooks: [],
+      visual: {
+        outfitTags: ['flowing_robe', 'herb_satchel'],
+        accessoryTags: ['flower_crown', 'mortar_pestle'],
+      },
+    },
   ];
   
   const portalBoards = createPortalBoards(worldId, ingredients, npcRoster);
