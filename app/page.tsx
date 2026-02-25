@@ -57,7 +57,7 @@ function Logo() {
         </span>
       </h1>
       <p className="text-xl text-muted-foreground mt-3 font-medium">
-        A Cozy Culinary Adventure
+        A Stylized 3D AI Shooter Adventure
       </p>
     </div>
   );
@@ -159,10 +159,10 @@ export default function MainMenu() {
         
         {/* Feature highlights */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom duration-700 delay-200">
-          <FeatureCard emoji="🗺️" title="Explore" description="Visit themed regions" />
-          <FeatureCard emoji="👥" title="Befriend" description="Meet unique NPCs" />
-          <FeatureCard emoji="🥬" title="Gather" description="Collect ingredients" />
-          <FeatureCard emoji="🍳" title="Cook" description="Master recipes" />
+          <FeatureCard emoji="🎯" title="FPS Combat" description="Fast first-person action" />
+          <FeatureCard emoji="🤖" title="AI Encounters" description="Dynamic enemy waves" />
+          <FeatureCard emoji="👥" title="AI NPCs" description="Interactive dialogue & quests" />
+          <FeatureCard emoji="🍳" title="Cook" description="Fight for ingredients, craft dishes" />
         </div>
         
         {/* Dish selection */}
@@ -215,7 +215,7 @@ export default function MainMenu() {
         
         {/* Footer info */}
         <div className="text-center text-sm text-muted-foreground animate-in fade-in duration-700 delay-500">
-          <p>🎮 WASD to move • E to interact • ESC to pause</p>
+          <p>🎮 Click to lock mouse • WASD move • LMB shoot • E interact</p>
           <p className="mt-2 text-xs opacity-60">
             Powered by AI-generated content • Built with Next.js & React Three Fiber
           </p>

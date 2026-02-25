@@ -350,6 +350,28 @@ export const dialogueTurnSchema = z.object({
 });
 
 // ============================================
+// Encounter Schema (FPS mode)
+// ============================================
+
+export const enemyArchetypeSchema = z.object({
+  enemyId: z.string().describe('Unique ID for this enemy archetype'),
+  name: z.string().describe('Display name'),
+  taunt: z.string().describe('Short battle line'),
+  colorHex: z.string().describe('Hex color for enemy visuals'),
+  speed: z.number().min(1.5).max(6),
+  health: z.number().int().min(25).max(200),
+  size: z.number().min(0.7).max(1.5),
+});
+
+export const encounterSchema = z.object({
+  encounterName: z.string().describe('Name of this wave style'),
+  mood: z.string().describe('Short descriptor of encounter mood'),
+  objectiveHint: z.string().describe('Helpful tactical hint for player'),
+  threatLevel: z.number().int().min(1).max(5),
+  enemies: z.array(enemyArchetypeSchema).min(2).max(5),
+});
+
+// ============================================
 // Quest Resolution Schema
 // ============================================
 
@@ -401,4 +423,3 @@ export type PortalBoard = z.infer<typeof portalBoardSchema>;
 export type WorldRecipe = z.infer<typeof worldRecipeSchema>;
 export type DialogueTurn = z.infer<typeof dialogueTurnSchema>;
 export type QuestResolution = z.infer<typeof questResolutionSchema>;
-
