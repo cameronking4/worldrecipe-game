@@ -60,6 +60,7 @@ The entire world—regions, NPCs, quests, ingredients—is procedurally generate
 | **React Three Fiber** | React renderer for Three.js |
 | **React Three Drei** | Useful helpers for R3F |
 | **React Three Rapier** | Physics engine (WASM-based) |
+| **React Three Postprocessing** | Visual effects pipeline |
 
 ### AI & Data
 | Technology | Purpose |
@@ -106,7 +107,8 @@ worldrecipe-game/
 │   │   ├── PlayerController.tsx  # Player movement & input
 │   │   ├── VoxelTerrain.tsx      # Terrain generation
 │   │   ├── NPCController.tsx     # NPC behavior
-│   │   └── Interactable.tsx      # Interactive objects
+│   │   ├── Interactable.tsx      # Interactive objects
+│   │   └── PortalBoard.tsx       # Portal sub-world renderer
 │   │
 │   └── ui/                       # UI overlay components
 │       ├── HUD.tsx               # Heads-up display
@@ -114,6 +116,8 @@ worldrecipe-game/
 │       ├── JournalPanel.tsx      # Quest/recipe tracker
 │       ├── InventoryPanel.tsx    # Item management
 │       ├── CookingUI.tsx         # Cooking mini-games
+│       ├── PortalTransition.tsx  # Portal travel animation
+│       ├── ToastNotifications.tsx # Toast & autosave indicators
 │       └── [shadcn components]   # Badge, Button, Card, etc.
 │
 ├── lib/
@@ -127,7 +131,10 @@ worldrecipe-game/
 │   └── store/
 │       ├── gameStore.ts          # Core game state (time, UI, pause)
 │       ├── playerStore.ts        # Player state (inventory, quests)
-│       └── worldStore.ts         # World data & region state
+│       ├── worldStore.ts         # World data & region state
+│       ├── portalStore.ts        # Portal navigation & transitions
+│       ├── notificationStore.ts  # Toast notification state
+│       └── saveStore.ts          # Save/load & autosave persistence
 │
 ├── types/
 │   └── game.ts                   # Core TypeScript interfaces
@@ -355,7 +362,7 @@ The AI generates contextual dialogue based on:
 
 ## 🗄 State Management
 
-### Three Zustand Stores
+### Six Zustand Stores
 
 #### 1. GameStore (`lib/store/gameStore.ts`)
 Manages global game state:
@@ -448,6 +455,74 @@ interface WorldState {
   generateWorld: (dishPrompt: string, seed?: string) => Promise<WorldRecipe>;
 }
 ```
+
+#### 4. PortalStore (`lib/store/portalStore.ts`)
+Manages portal navigation between the hub world and portal sub-boards:
+
+```typescript
+interface PortalState {
+  isInPortal: boolean;
+  currentPortalBoardId: string | null;
+  currentPortalType: PortalType | null;
+  isTransitioning: boolean;
+  portalHistory: Array<{ portalBoardId: string; portalType: PortalType; hubPortalPoiId: string }>;
+
+  enterPortal: (portalPoi: POI) => Promise<boolean>;
+  returnToHub: () => Promise<boolean>;
+  canAccessPortal: (portalPoi: POI) => boolean;
+  getCurrentPortalBoard: () => PortalBoard | null;
+}
+```
+
+**Key Behavior:**
+- Kitchen portals require all dish ingredients to access
+- Other portal types are always accessible
+- Maintains navigation history for return trips
+- Coordinates with `PortalTransition` for animated travel effects
+
+#### 5. NotificationStore (`lib/store/notificationStore.ts`)
+Manages in-game toast notifications:
+
+```typescript
+interface NotificationState {
+  notifications: Notification[];
+  maxNotifications: number;  // 5 max visible
+
+  // Convenience methods
+  showQuestAccepted: (questTitle: string) => void;
+  showQuestCompleted: (questTitle: string) => void;
+  showObjectiveCompleted: (description: string) => void;
+  showItemCollected: (itemName: string, quantity?: number) => void;
+  showRelationshipUp: (npcName: string) => void;
+  showAutosave: () => void;
+}
+```
+
+**Notification Types:** `info`, `success`, `warning`, `error`, `quest_accepted`, `quest_completed`, `objective_completed`, `item_collected`, `relationship_up`, `autosave`
+
+#### 6. SaveStore (`lib/store/saveStore.ts`)
+Handles game persistence and autosave:
+
+```typescript
+interface SaveState {
+  saveId: string | null;
+  lastSaveTime: number | null;
+  isSaving: boolean;
+  isLoading: boolean;
+  autoSaveEnabled: boolean;
+
+  saveGame: () => Promise<boolean>;
+  loadGame: (saveId?: string) => Promise<boolean>;
+  loadLatestSave: (worldId: string) => Promise<boolean>;
+  startAutoSave: (intervalMs?: number) => void;  // Default: 60s
+  stopAutoSave: () => void;
+}
+```
+
+**Key Behavior:**
+- Aggregates state from `playerStore`, `gameStore`, and `worldStore` into a single save payload
+- Autosave runs every 60 seconds (only while playing and not paused)
+- Restores full game state from save data including position, inventory, quests, relationships, and time
 
 ### Store Usage Patterns
 
@@ -704,6 +779,16 @@ const useKeyboard = () => {
 - Smooth rotation to face movement direction
 - Camera follows player smoothly
 
+### PortalBoard (`components/game/PortalBoard.tsx`)
+
+Renders portal sub-worlds — self-contained mini-maps that players travel to through portals in the hub:
+
+- Builds a mini-region from `PortalBoard` data (terrain, NPC, ingredients, palette)
+- Reuses `VoxelTerrain`, `NPCManager`, and `InteractableManager` components
+- Handles NPC interaction (starts dialogue, updates talk objectives)
+- Handles ingredient pickup (adds items to inventory)
+- Only renders when the player is inside a portal (controlled by `portalStore`)
+
 ### Scene Decorations
 
 Voxel-style props:
@@ -749,6 +834,26 @@ Multi-tab progress tracker:
 | Ingredients | Collection checklist |
 | Quests | Active/completed quests |
 | Friends | NPC relationship levels |
+
+### PortalTransition (`components/ui/PortalTransition.tsx`)
+
+Animated full-screen overlay for portal travel:
+
+- **Phases:** `idle` → `fadeOut` (0.5s) → `portal` (0.3s) → `fadeIn` (0.5s) → `idle`
+- Displays a swirling portal effect with concentric rings (purple/blue/cyan)
+- "Traveling through portal..." loading text during the portal phase
+- Driven by `portalStore.isTransitioning`
+
+### ToastNotifications (`components/ui/ToastNotifications.tsx`)
+
+Two exported components:
+
+| Component | Purpose |
+|-----------|---------|
+| `ToastContainer` | Renders stacked toast notifications (top-right) |
+| `AutosaveIndicator` | Shows save status (bottom-right) — "Saving..." or "Saved HH:MM" |
+
+Toasts are color-coded by type (quest events are amber/purple, items are cyan, relationships are pink, etc.) and auto-dismiss after their configured duration.
 
 ### CookingUI (`components/ui/CookingUI.tsx`)
 
@@ -873,6 +978,36 @@ IngredientGraph
 - `fish` - Catch from water
 - `trade` - Buy from NPCs
 - `craft` - Create from other ingredients
+
+### Portal System
+
+Players navigate between the hub world and themed portal sub-boards:
+
+```
+Hub Region (main map)
+├── Portal: Market   → MarketBoard (trade ingredients, talk to vendors)
+├── Portal: Farm     → FarmBoard (harvest, gather)
+├── Portal: Fishing  → FishingBoard (catch fish ingredients)
+└── Portal: Kitchen  → KitchenBoard (final cooking — requires all ingredients)
+```
+
+**Flow:**
+1. Player walks to a portal POI in the hub
+2. `portalStore.canAccessPortal()` checks requirements (kitchen portal needs all ingredients)
+3. `portalStore.enterPortal()` starts the transition
+4. `PortalTransition` plays the fade-out / swirl / fade-in animation
+5. `PortalBoard` renders the sub-world (terrain, NPC, ingredients)
+6. Player can interact, collect items, talk to NPCs
+7. `portalStore.returnToHub()` sends the player back to the hub portal location
+
+### Save & Autosave System
+
+Game progress is persisted via the `saveStore` and `/api/save` endpoint:
+
+- **Manual save:** `saveStore.saveGame()` serializes all store state and POSTs to the server
+- **Autosave:** Runs every 60 seconds while playing (configurable via `startAutoSave(intervalMs)`)
+- **Load:** `loadGame(saveId)` or `loadLatestSave(worldId)` fetches and restores full state
+- **Visual feedback:** `AutosaveIndicator` shows "Saving..." spinner and last save timestamp
 
 ### Time & Schedule System
 
