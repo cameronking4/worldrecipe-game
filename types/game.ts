@@ -1,90 +1,261 @@
 // ============================================
-// World Recipe - Core Game Types
+// AI Arena FPS - Core Game Types
 // ============================================
 
-// Time of day cycle
+// Time of day cycle (affects lighting/atmosphere)
 export type TimeOfDay = 'morning' | 'day' | 'evening' | 'night';
 
-// Player state
-export interface PlayerState {
+// ============================================
+// Weapon System
+// ============================================
+
+export type WeaponType = 'pistol' | 'rifle' | 'shotgun' | 'sniper' | 'plasma' | 'launcher';
+
+export interface WeaponStats {
+  damage: number;
+  fireRate: number; // shots per second
+  reloadTime: number; // seconds
+  magazineSize: number;
+  maxAmmo: number;
+  spread: number; // accuracy (0 = perfect, 1 = very inaccurate)
+  range: number;
+  projectileSpeed: number;
+  knockback: number;
+}
+
+export interface Weapon {
+  weaponId: string;
+  name: string;
+  description: string;
+  type: WeaponType;
+  stats: WeaponStats;
+  rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
+  color: string; // hex color for weapon glow/theme
+}
+
+// ============================================
+// Enemy System
+// ============================================
+
+export type EnemyBehavior = 'rusher' | 'sniper' | 'flanker' | 'tank' | 'bomber' | 'support';
+
+export interface EnemyType {
+  enemyTypeId: string;
+  name: string;
+  description: string;
+  behavior: EnemyBehavior;
+  health: number;
+  speed: number;
+  damage: number;
+  attackRange: number;
+  attackCooldown: number; // seconds between attacks
+  color: string; // hex color for enemy theme
+  scale: number; // size multiplier
+  scoreValue: number;
+  taunts: string[]; // AI-generated taunts
+}
+
+export interface EnemyInstance {
+  instanceId: string;
+  typeId: string;
   position: [number, number, number];
   rotation: number;
+  health: number;
+  maxHealth: number;
+  isAlive: boolean;
+  lastAttackTime: number;
+  targetPosition?: [number, number, number];
+  state: 'idle' | 'patrol' | 'chase' | 'attack' | 'flee' | 'stunned';
+}
+
+// ============================================
+// Wave System
+// ============================================
+
+export interface WaveConfig {
+  waveNumber: number;
+  enemies: { enemyTypeId: string; count: number; delay: number }[];
+  spawnPoints: [number, number, number][];
+  bonusObjective?: string;
+  difficultyMultiplier: number;
+  intermissionDuration: number; // seconds between waves
+}
+
+// ============================================
+// Arena / Map
+// ============================================
+
+export type ArenaTheme = 'industrial' | 'ruins' | 'neon_city' | 'frozen' | 'volcanic' | 'forest' | 'space_station';
+
+export interface CoverObject {
+  position: [number, number, number];
+  size: [number, number, number];
+  type: 'wall' | 'crate' | 'pillar' | 'barrier';
+  destructible: boolean;
+  health?: number;
+}
+
+export interface ArenaSpec {
+  arenaId: string;
+  name: string;
+  description: string;
+  theme: ArenaTheme;
+  width: number;
+  height: number;
+  playerSpawn: [number, number, number];
+  enemySpawnPoints: [number, number, number][];
+  coverObjects: CoverObject[];
+  pickupLocations: { position: [number, number, number]; type: 'health' | 'ammo' | 'weapon' }[];
+  palette: ArenaPalette;
+  ambientDescription: string; // AI-generated atmosphere text
+}
+
+export interface ArenaPalette {
+  ground: string;
+  walls: string;
+  accent: string;
+  sky: string;
+  fog: string;
+  emissive: string;
+}
+
+// ============================================
+// Mission / Campaign
+// ============================================
+
+export interface Mission {
+  missionId: string;
+  name: string;
+  briefing: string; // AI-generated mission briefing
+  difficulty: 'easy' | 'medium' | 'hard' | 'nightmare';
+  arena: ArenaSpec;
+  waves: WaveConfig[];
+  enemyTypes: EnemyType[];
+  availableWeapons: Weapon[];
+  storyline: string; // AI-generated narrative
+  completionMessage: string;
+  rewards: { type: 'weapon' | 'score_multiplier' | 'title'; value: string }[];
+}
+
+// ============================================
+// Player State
+// ============================================
+
+export interface PlayerState {
+  position: [number, number, number];
+  rotation: [number, number]; // [yaw, pitch]
   velocity: [number, number, number];
 }
 
-// Item and inventory
-export interface Item {
-  itemId: string;
-  name: string;
-  description: string;
-  category: 'ingredient' | 'tool' | 'souvenir' | 'clothing' | 'decor';
-  icon?: string;
-  rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
+export interface PlayerCombatState {
+  health: number;
+  maxHealth: number;
+  armor: number;
+  maxArmor: number;
+  currentWeaponIndex: number;
+  weapons: Weapon[];
+  ammo: Record<string, number>; // weaponId -> current magazine ammo
+  reserveAmmo: Record<string, number>; // weaponId -> reserve ammo
+  isReloading: boolean;
+  reloadStartTime: number;
+  lastFireTime: number;
+  kills: number;
+  deaths: number;
+  score: number;
+  damageDealt: number;
+  accuracy: { shots: number; hits: number };
 }
 
-export interface ItemStack {
-  item: Item;
-  quantity: number;
+// ============================================
+// Projectile
+// ============================================
+
+export interface Projectile {
+  projectileId: string;
+  position: [number, number, number];
+  direction: [number, number, number];
+  speed: number;
+  damage: number;
+  ownerId: 'player' | string; // 'player' or enemyInstanceId
+  weaponType: WeaponType;
+  createdAt: number;
+  maxLifetime: number; // seconds
 }
 
-// Ingredient system
-export interface Ingredient extends Item {
-  category: 'ingredient';
-  origin: string; // Region where found
-  seasonality?: string[];
-  substitutes?: string[]; // IDs of substitute ingredients
-  flavorProfile?: string[];
+// ============================================
+// Pickup Items
+// ============================================
+
+export interface Pickup {
+  pickupId: string;
+  type: 'health' | 'ammo' | 'armor' | 'weapon';
+  position: [number, number, number];
+  value: number;
+  weaponId?: string; // if type is 'weapon'
+  isCollected: boolean;
+  respawnTime?: number;
 }
 
-// NPC system
-export interface NPCPersonality {
-  archetype: string;
-  traits: string[];
-  speakingStyle: string;
-  likes: string[];
-  dislikes: string[];
+// ============================================
+// Damage / Hit
+// ============================================
+
+export interface DamageEvent {
+  targetId: string;
+  sourceId: string;
+  damage: number;
+  position: [number, number, number];
+  isHeadshot: boolean;
+  isCritical: boolean;
+  timestamp: number;
 }
 
-export interface NPCVisual {
-  paletteOverrides?: Record<string, string>;
-  outfitTags: string[];
-  accessoryTags: string[];
+export interface KillFeedEntry {
+  killerId: string;
+  killerName: string;
+  victimId: string;
+  victimName: string;
+  weaponType: WeaponType;
+  isHeadshot: boolean;
+  timestamp: number;
 }
 
-export interface ScheduleEntry {
-  timeOfDay: TimeOfDay;
-  locationId: string;
-  activity: string;
+// ============================================
+// Game State
+// ============================================
+
+export type GamePhase = 'menu' | 'loading' | 'briefing' | 'combat' | 'intermission' | 'victory' | 'defeat';
+
+export interface GameState {
+  phase: GamePhase;
+  currentWave: number;
+  totalWaves: number;
+  enemiesAlive: number;
+  enemiesKilledThisWave: number;
+  totalEnemiesKilled: number;
+  waveStartTime: number;
+  intermissionEndTime: number;
+  missionStartTime: number;
+  isPaused: boolean;
 }
 
-export interface NPC {
-  npcId: string;
-  name: string;
-  speciesStyle: string;
-  personality: NPCPersonality;
-  role: {
-    job: string;
-    services: string[];
+// ============================================
+// AI-Generated World (kept from original, adapted)
+// ============================================
+
+export interface WorldRecipe {
+  worldId: string;
+  seed: string;
+  mission: Mission;
+  colorSystem: {
+    uiTokens: Record<string, string>;
+    environmentTokens: Record<string, string>;
   };
-  schedule: ScheduleEntry[];
-  relationship: {
-    startingLevel: number;
-    maxLevel: number;
-    levelRewards: string[];
-  };
-  questHooks: string[];
-  visual: NPCVisual;
 }
 
-// Dialogue system
-export interface DialogueChoice {
-  text: string;
-  nextNodeId?: string;
-  effect?: {
-    type: 'relationship' | 'quest' | 'trade' | 'hint';
-    value: string | number;
-  };
-}
+// ============================================
+// Dialogue (AI enemy taunts / ally comms)
+// ============================================
 
 export interface DialogueNode {
   nodeId: string;
@@ -94,235 +265,13 @@ export interface DialogueNode {
   tags?: string[];
 }
 
-export interface DialoguePack {
-  greeting: DialogueNode[];
-  questOffer: DialogueNode[];
-  questProgress: DialogueNode[];
-  relationshipEvents: DialogueNode[];
-  general: DialogueNode[];
-}
-
-// Quest system
-export type ObjectiveType = 'gather' | 'deliver' | 'talk' | 'craft' | 'cook-step';
-
-export interface QuestObjective {
-  objectiveId: string;
-  type: ObjectiveType;
-  description: string;
-  target: string; // Item ID, NPC ID, or step ID
-  quantity?: number;
-  completed: boolean;
-}
-
-export interface QuestChapter {
-  questId: string;
-  title: string;
-  description: string;
-  giverNpcId: string;
-  objectives: QuestObjective[];
-  rewards: ItemStack[];
-  nextQuestId?: string;
-}
-
-export interface QuestArc {
-  arcId: string;
-  title: string;
-  chapters: QuestChapter[];
-  unlocksCookingStepId?: string;
-}
-
-// Cooking system
-export interface CookingStep {
-  stepId: string;
-  name: string;
-  description: string;
-  technique: string;
-  requiredIngredients: { ingredientId: string; quantity: number; substitutes?: string[] }[];
-  miniGameType?: 'stir' | 'chop' | 'toast' | 'none';
-  unlocked: boolean;
-  completed: boolean;
-}
-
-export interface Dish {
-  name: string;
-  tagline: string;
-  inspirations: string[];
-  dietaryTags: string[];
-  difficulty: 'easy' | 'medium' | 'hard';
-  storyHook: string;
-}
-
-// Position types - support both tuple and object formats
-export type PositionTuple = [number, number];
-export type PositionObject = { x: number; y: number };
-export type Position = PositionTuple | PositionObject;
-
-// Helper to normalize position to tuple format
-export function normalizePosition(pos: Position): [number, number] {
-  if (Array.isArray(pos)) {
-    return pos;
-  }
-  return [pos.x, pos.y];
-}
-
-// Portal types
-export type PortalType = 'farm' | 'grocery_store' | 'kitchen' | 'foraging_grounds' | 'exotic_garden';
-
-// Map and region
-export interface POI {
-  poiId: string;
-  type: 'market' | 'dock' | 'shrine' | 'farm' | 'kitchen_hut' | 'npc_home' | 'gathering_spot' | 'portal';
-  name: string;
-  position: Position;
-  interactRadius: number;
-  // Portal-specific fields
-  portalType?: PortalType;
-  destinationBoardId?: string; // ID of the portal board
-  requiredIngredients?: string[]; // For kitchen portal
-  isReturnPortal?: boolean; // True if this is a return portal in a portal board
-}
-
-export type Size = [number, number] | { width: number; height: number };
-
-// Helper to normalize size to tuple format
-export function normalizeSize(size: Size): [number, number] {
-  if (Array.isArray(size)) {
-    return size;
-  }
-  return [size.width, size.height];
-}
-
-export interface DecorRules {
-  density: number;
-  propThemes: string[];
-}
-
-export interface SpawnPoints {
-  player: Position;
-  npcSpawns: { npcId: string; position: Position }[];
-}
-
-export interface MapSpec {
-  grid: {
-    width: number;
-    height: number;
-    cellSize: number;
-  };
-  terrain: {
-    waterBodies: { position: Position; size: Size }[];
-    elevationHints: { position: Position; height: number }[];
-    paths: { from: Position; to: Position }[];
-  };
-  // These can be optional at mapSpec level if defined at region level
-  pois?: POI[];
-  spawnPoints?: SpawnPoints;
-  decorRules?: DecorRules;
-}
-
-export interface Palette {
-  primary: string;
-  secondary: string;
-  accent: string;
-  ground: string;
-  foliage: string;
-  sky: string;
-  uiBg: string;
-  uiText: string;
-}
-
-export interface RegionInspiration {
-  countryOrArea: string;
-  notes: string;
-  avoidStereotypesChecklist: string[];
-}
-
-export interface RegionSpec {
-  regionId: string;
-  name: string;
-  inspiration: RegionInspiration;
-  biomes: string[];
-  palette: Palette;
-  mapSpec: MapSpec;
-  // These can be at region level (AI sometimes generates them here)
-  pois?: POI[];
-  spawnPoints?: SpawnPoints;
-  decorRules?: DecorRules;
-}
-
-// Ingredient graph
-export interface IngredientNode {
-  ingredientId: string;
-  name: string;
-  category: string;
-  regionId: string;
-  gatherMethod: 'pickup' | 'harvest' | 'fish' | 'trade' | 'craft' | 'gather' | 'forage';
-}
-
-export interface DependencyEdge {
-  from: string;
-  to: string;
-  type: 'requires' | 'unlocks' | 'substitute';
-}
-
-export interface IngredientGraph {
-  ingredients: IngredientNode[];
-  dependencies: DependencyEdge[];
-}
-
-// Portal Board - mini-board accessible via portal
-export interface PortalBoard {
-  boardId: string;
-  portalType: PortalType;
-  name: string;
-  description: string;
-  mapSpec: MapSpec; // Small board (~40x40)
-  npc: NPC; // Single NPC for this board
-  ingredients: IngredientNode[]; // Ingredients available here
-  spawnPoint: Position;
-  palette: Palette;
-}
-
-// World Recipe - main generated object
-export interface WorldRecipe {
-  worldId: string;
-  seed: string;
-  dish: Dish;
-  regions: RegionSpec[];
-  ingredientGraph: IngredientGraph;
-  questArcs: QuestArc[];
-  npcRoster: NPC[];
-  portalBoards?: PortalBoard[]; // Portal boards accessible from hub
-  colorSystem: {
-    uiTokens: Record<string, string>;
-    environmentTokens: Record<string, string>;
-  };
-  startingInventory: ItemStack[];
-}
-
-// Game save state
-export interface GameSave {
-  saveId: string;
-  worldId: string;
-  playerPosition: [number, number, number];
-  currentRegionId: string;
-  inventory: ItemStack[];
-  completedQuests: string[];
-  activeQuests: QuestChapter[];
-  npcRelationships: Record<string, number>;
-  completedCookingSteps: string[];
-  timeOfDay: TimeOfDay;
-  dayNumber: number;
-  playTimeSeconds: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// UI state types
-export interface InteractionPrompt {
-  visible: boolean;
+export interface DialogueChoice {
   text: string;
-  targetId?: string;
-  targetType?: 'npc' | 'item' | 'poi';
+  nextNodeId?: string;
+  effect?: {
+    type: 'relationship' | 'quest' | 'trade' | 'hint';
+    value: string | number;
+  };
 }
 
 export interface DialogueState {
@@ -332,3 +281,53 @@ export interface DialogueState {
   history: DialogueNode[];
 }
 
+// ============================================
+// Interaction Prompt
+// ============================================
+
+export interface InteractionPrompt {
+  visible: boolean;
+  text: string;
+  targetId?: string;
+  targetType?: 'pickup' | 'terminal' | 'door';
+}
+
+// ============================================
+// UI State
+// ============================================
+
+export interface HitMarker {
+  id: string;
+  position: [number, number]; // screen position
+  isHeadshot: boolean;
+  isCritical: boolean;
+  damage: number;
+  timestamp: number;
+}
+
+export interface DamageIndicator {
+  id: string;
+  direction: number; // angle in radians
+  timestamp: number;
+}
+
+// ============================================
+// Game Save
+// ============================================
+
+export interface GameSave {
+  saveId: string;
+  worldId: string;
+  playerPosition: [number, number, number];
+  health: number;
+  armor: number;
+  weapons: Weapon[];
+  ammo: Record<string, number>;
+  reserveAmmo: Record<string, number>;
+  currentWave: number;
+  score: number;
+  kills: number;
+  playTimeSeconds: number;
+  createdAt: Date;
+  updatedAt: Date;
+}

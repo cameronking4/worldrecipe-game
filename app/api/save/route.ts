@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '@/lib/db/client';
+import { db as _db } from '@/lib/db/client';
 import { saves, worlds } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+
+const db = _db as any;
 
 // ============================================
 // Save Game API
@@ -232,11 +234,11 @@ export async function GET(request: Request) {
       // List saves for a world
       const worldSaves = await db.query.saves.findMany({
         where: eq(saves.worldId, worldId),
-        orderBy: (saves, { desc }) => [desc(saves.updatedAt)],
+        orderBy: (s: any, { desc }: any) => [desc(s.updatedAt)],
       });
       
       return NextResponse.json({
-        saves: worldSaves.map((save) => ({
+        saves: worldSaves.map((save: any) => ({
           saveId: save.saveId,
           slotNumber: save.slotNumber,
           playerName: save.playerName,
@@ -249,12 +251,12 @@ export async function GET(request: Request) {
     
     // List all recent saves
     const recentSaves = await db.query.saves.findMany({
-      orderBy: (saves, { desc }) => [desc(saves.updatedAt)],
+      orderBy: (s: any, { desc }: any) => [desc(s.updatedAt)],
       limit: 10,
     });
     
     return NextResponse.json({
-      saves: recentSaves.map((save) => ({
+      saves: recentSaves.map((save: any) => ({
         saveId: save.saveId,
         worldId: save.worldId,
         slotNumber: save.slotNumber,

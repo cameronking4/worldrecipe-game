@@ -1,440 +1,343 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { ItemStack, Item, QuestChapter, QuestObjective } from '@/types/game';
-import { useNotificationStore } from './notificationStore';
-import { useWorldStore } from './worldStore';
+import type { Weapon, WeaponType } from '@/types/game';
 
 // ============================================
-// Player Store - Player-specific state
+// Player Store - FPS player state
 // ============================================
+
+// Default starting pistol
+const DEFAULT_PISTOL: Weapon = {
+  weaponId: 'weapon_pistol_default',
+  name: 'Sidearm P7',
+  description: 'Reliable standard-issue pistol',
+  type: 'pistol',
+  stats: {
+    damage: 20,
+    fireRate: 4,
+    reloadTime: 1.2,
+    magazineSize: 12,
+    maxAmmo: 120,
+    spread: 0.02,
+    range: 50,
+    projectileSpeed: 80,
+    knockback: 2,
+  },
+  rarity: 'common',
+  color: '#8899AA',
+};
 
 interface PlayerState {
-  // Position and movement
+  // Position and look
   position: [number, number, number];
-  rotation: number;
+  rotation: [number, number]; // [yaw, pitch]
   isMoving: boolean;
+  isSprinting: boolean;
   moveDirection: { x: number; z: number };
-  
-  // Inventory
-  inventory: ItemStack[];
-  maxInventorySlots: number;
-  
-  // Quests
-  activeQuests: QuestChapter[];
-  completedQuestIds: string[];
-  
-  // NPC relationships
-  npcRelationships: Record<string, number>;
-  
-  // Cooking progress
-  completedCookingSteps: string[];
-  unlockedTechniques: string[];
-  
-  // Collected items (to prevent respawn)
-  collectedItemIds: string[];
-  
-  // NPC conversation memory
-  npcConversationMemory: Record<string, string[]>;
-  
+
+  // Combat
+  health: number;
+  maxHealth: number;
+  armor: number;
+  maxArmor: number;
+
+  // Weapons
+  weapons: Weapon[];
+  currentWeaponIndex: number;
+  ammo: Record<string, number>; // weaponId -> magazine ammo
+  reserveAmmo: Record<string, number>; // weaponId -> reserve ammo
+  isReloading: boolean;
+  reloadStartTime: number;
+  lastFireTime: number;
+
   // Stats
-  stamina: number;
-  maxStamina: number;
-  
-  // Actions
+  kills: number;
+  deaths: number;
+  score: number;
+  shotsTotal: number;
+  shotsHit: number;
+
+  // Actions - Movement
   setPosition: (pos: [number, number, number]) => void;
-  setRotation: (rot: number) => void;
+  setRotation: (rot: [number, number]) => void;
   setMoving: (moving: boolean) => void;
+  setSprinting: (sprinting: boolean) => void;
   setMoveDirection: (dir: { x: number; z: number }) => void;
-  
-  // Inventory actions
-  addItem: (item: Item, quantity?: number) => boolean;
-  removeItem: (itemId: string, quantity?: number) => boolean;
-  hasItem: (itemId: string, quantity?: number) => boolean;
-  getItemCount: (itemId: string) => number;
-  hasAllDishIngredients: () => boolean;
-  
-  // Quest actions
-  acceptQuest: (quest: QuestChapter) => void;
-  updateObjective: (questId: string, objectiveId: string) => void;
-  completeQuest: (questId: string) => void;
-  getActiveQuest: (questId: string) => QuestChapter | undefined;
-  checkAndUpdateGatherObjectives: (itemId: string) => void;
-  checkAndUpdateTalkObjectives: (npcId: string) => void;
-  
-  // Relationship actions
-  updateRelationship: (npcId: string, delta: number) => void;
-  getRelationship: (npcId: string) => number;
-  
-  // Cooking actions
-  completeCookingStep: (stepId: string) => void;
-  unlockTechnique: (techniqueId: string) => void;
-  hasCompletedStep: (stepId: string) => boolean;
-  
-  // Stamina actions
-  useStamina: (amount: number) => boolean;
-  restoreStamina: (amount: number) => void;
-  
-  // Collected items actions
-  markCollected: (itemId: string) => void;
-  isCollected: (itemId: string) => boolean;
-  
-  // NPC memory actions
-  addConversationMemory: (npcId: string, summary: string) => void;
-  getConversationMemory: (npcId: string) => string[];
-  
-  // Restore state (for save/load)
+
+  // Actions - Combat
+  takeDamage: (damage: number) => boolean; // returns true if still alive
+  heal: (amount: number) => void;
+  addArmor: (amount: number) => void;
+  die: () => void;
+  respawn: (position: [number, number, number]) => void;
+
+  // Actions - Weapons
+  addWeapon: (weapon: Weapon) => void;
+  switchWeapon: (index: number) => void;
+  nextWeapon: () => void;
+  prevWeapon: () => void;
+  getCurrentWeapon: () => Weapon | null;
+  fire: () => boolean; // returns true if fired successfully
+  startReload: () => void;
+  finishReload: () => void;
+  cancelReload: () => void;
+  addAmmo: (weaponId: string, amount: number) => void;
+  addAmmoForType: (weaponType: WeaponType, amount: number) => void;
+
+  // Actions - Stats
+  addKill: (scoreValue: number) => void;
+  recordShot: (hit: boolean) => void;
+  getAccuracy: () => number;
+
+  // Restore / Reset
   restoreState: (state: Partial<PlayerState>) => void;
-  
-  // Reset
   reset: () => void;
 }
 
 const initialState = {
-  position: [0, 0.5, 0] as [number, number, number],
-  rotation: 0,
+  position: [0, 1.6, 0] as [number, number, number],
+  rotation: [0, 0] as [number, number],
   isMoving: false,
+  isSprinting: false,
   moveDirection: { x: 0, z: 0 },
-  
-  inventory: [] as ItemStack[],
-  maxInventorySlots: 24,
-  
-  activeQuests: [] as QuestChapter[],
-  completedQuestIds: [] as string[],
-  
-  npcRelationships: {} as Record<string, number>,
-  
-  completedCookingSteps: [] as string[],
-  unlockedTechniques: [] as string[],
-  
-  // Collected items tracking (to prevent respawn)
-  collectedItemIds: [] as string[],
-  
-  // NPC conversation memory (summaries for continuity)
-  npcConversationMemory: {} as Record<string, string[]>,
-  
-  stamina: 100,
-  maxStamina: 100,
+
+  health: 100,
+  maxHealth: 100,
+  armor: 0,
+  maxArmor: 100,
+
+  weapons: [DEFAULT_PISTOL] as Weapon[],
+  currentWeaponIndex: 0,
+  ammo: { [DEFAULT_PISTOL.weaponId]: DEFAULT_PISTOL.stats.magazineSize } as Record<string, number>,
+  reserveAmmo: { [DEFAULT_PISTOL.weaponId]: DEFAULT_PISTOL.stats.maxAmmo } as Record<string, number>,
+  isReloading: false,
+  reloadStartTime: 0,
+  lastFireTime: 0,
+
+  kills: 0,
+  deaths: 0,
+  score: 0,
+  shotsTotal: 0,
+  shotsHit: 0,
 };
 
 export const usePlayerStore = create<PlayerState>()(
   subscribeWithSelector((set, get) => ({
     ...initialState,
-    
+
+    // Movement
     setPosition: (pos) => set({ position: pos }),
     setRotation: (rot) => set({ rotation: rot }),
     setMoving: (moving) => set({ isMoving: moving }),
+    setSprinting: (sprinting) => set({ isSprinting: sprinting }),
     setMoveDirection: (dir) => set({ moveDirection: dir }),
-    
-    addItem: (item, quantity = 1) => {
-      const { inventory, maxInventorySlots } = get();
-      const existingStack = inventory.find(stack => stack.item.itemId === item.itemId);
-      
-      if (existingStack) {
-        // Add to existing stack
-        set({
-          inventory: inventory.map(stack =>
-            stack.item.itemId === item.itemId
-              ? { ...stack, quantity: stack.quantity + quantity }
-              : stack
-          ),
-        });
-        // Show notification
-        useNotificationStore.getState().showItemCollected(item.name, quantity);
-        // Auto-check gather objectives after adding
-        setTimeout(() => get().checkAndUpdateGatherObjectives(item.itemId), 0);
-        return true;
+
+    // Combat
+    takeDamage: (damage) => {
+      const { armor, health } = get();
+      let remaining = damage;
+
+      // Armor absorbs 60% of damage
+      let armorDamage = 0;
+      if (armor > 0) {
+        armorDamage = Math.min(armor, remaining * 0.6);
+        remaining -= armorDamage;
       }
-      
-      // Create new stack if we have room
-      if (inventory.length < maxInventorySlots) {
-        set({
-          inventory: [...inventory, { item, quantity }],
-        });
-        // Show notification
-        useNotificationStore.getState().showItemCollected(item.name, quantity);
-        // Auto-check gather objectives after adding
-        setTimeout(() => get().checkAndUpdateGatherObjectives(item.itemId), 0);
-        return true;
-      }
-      
-      return false; // No room
+
+      const newHealth = Math.max(0, health - remaining);
+      const newArmor = Math.max(0, armor - armorDamage);
+
+      set({ health: newHealth, armor: newArmor });
+      return newHealth > 0;
     },
-    
-    removeItem: (itemId, quantity = 1) => {
-      const { inventory } = get();
-      const stackIndex = inventory.findIndex(stack => stack.item.itemId === itemId);
-      
-      if (stackIndex === -1) return false;
-      
-      const stack = inventory[stackIndex];
-      if (stack.quantity < quantity) return false;
-      
-      if (stack.quantity === quantity) {
-        // Remove entire stack
-        set({
-          inventory: inventory.filter((_, i) => i !== stackIndex),
-        });
-      } else {
-        // Reduce quantity
-        set({
-          inventory: inventory.map((s, i) =>
-            i === stackIndex ? { ...s, quantity: s.quantity - quantity } : s
-          ),
-        });
-      }
-      
-      return true;
+
+    heal: (amount) => {
+      const { health, maxHealth } = get();
+      set({ health: Math.min(maxHealth, health + amount) });
     },
-    
-    hasItem: (itemId, quantity = 1) => {
-      return get().getItemCount(itemId) >= quantity;
+
+    addArmor: (amount) => {
+      const { armor, maxArmor } = get();
+      set({ armor: Math.min(maxArmor, armor + amount) });
     },
-    
-    getItemCount: (itemId) => {
-      const stack = get().inventory.find(s => s.item.itemId === itemId);
-      return stack?.quantity ?? 0;
-    },
-    
-    hasAllDishIngredients: () => {
-      const { inventory } = get();
-      const worldStore = useWorldStore.getState();
-      const world = worldStore.world;
-      
-      if (!world) return false;
-      
-      // Get all ingredients required for the dish
-      const requiredIngredients = world.ingredientGraph.ingredients.map(i => i.ingredientId);
-      
-      // Check if player has at least 1 of each required ingredient
-      return requiredIngredients.every(ingredientId => 
-        get().hasItem(ingredientId, 1)
-      );
-    },
-    
-    acceptQuest: (quest) => {
-      const { activeQuests, completedQuestIds } = get();
-      
-      // Don't accept if already active or completed
-      if (activeQuests.some(q => q.questId === quest.questId)) return;
-      if (completedQuestIds.includes(quest.questId)) return;
-      
-      set({
-        activeQuests: [...activeQuests, quest],
-      });
-      
-      // Show notification
-      useNotificationStore.getState().showQuestAccepted(quest.title);
-    },
-    
-    updateObjective: (questId, objectiveId) => {
+
+    die: () => {
       set((state) => ({
-        activeQuests: state.activeQuests.map(quest => {
-          if (quest.questId !== questId) return quest;
-          
-          return {
-            ...quest,
-            objectives: quest.objectives.map(obj =>
-              obj.objectiveId === objectiveId
-                ? { ...obj, completed: true }
-                : obj
-            ),
-          };
-        }),
+        health: 0,
+        deaths: state.deaths + 1,
       }));
     },
-    
-    completeQuest: (questId) => {
-      const { activeQuests, completedQuestIds, inventory, maxInventorySlots } = get();
-      const quest = activeQuests.find(q => q.questId === questId);
-      
-      if (!quest) return;
-      
-      // Add rewards to inventory
-      const newInventory = [...inventory];
-      for (const reward of quest.rewards) {
-        const existingStack = newInventory.find(s => s.item.itemId === reward.item.itemId);
-        if (existingStack) {
-          existingStack.quantity += reward.quantity;
-        } else if (newInventory.length < maxInventorySlots) {
-          newInventory.push({ ...reward });
+
+    respawn: (position) => {
+      set({
+        position,
+        health: get().maxHealth,
+        armor: 0,
+        isReloading: false,
+      });
+    },
+
+    // Weapons
+    addWeapon: (weapon) => {
+      const { weapons, ammo, reserveAmmo } = get();
+      const existing = weapons.find((w) => w.weaponId === weapon.weaponId);
+      if (existing) {
+        // Already have it - add ammo instead
+        set({
+          reserveAmmo: {
+            ...reserveAmmo,
+            [weapon.weaponId]: (reserveAmmo[weapon.weaponId] || 0) + weapon.stats.magazineSize,
+          },
+        });
+        return;
+      }
+
+      set({
+        weapons: [...weapons, weapon],
+        ammo: { ...ammo, [weapon.weaponId]: weapon.stats.magazineSize },
+        reserveAmmo: { ...reserveAmmo, [weapon.weaponId]: weapon.stats.maxAmmo },
+        currentWeaponIndex: weapons.length, // auto-switch
+      });
+    },
+
+    switchWeapon: (index) => {
+      const { weapons, isReloading } = get();
+      if (index < 0 || index >= weapons.length) return;
+      if (isReloading) {
+        set({ isReloading: false, reloadStartTime: 0 });
+      }
+      set({ currentWeaponIndex: index });
+    },
+
+    nextWeapon: () => {
+      const { weapons, currentWeaponIndex } = get();
+      if (weapons.length <= 1) return;
+      const next = (currentWeaponIndex + 1) % weapons.length;
+      get().switchWeapon(next);
+    },
+
+    prevWeapon: () => {
+      const { weapons, currentWeaponIndex } = get();
+      if (weapons.length <= 1) return;
+      const prev = (currentWeaponIndex - 1 + weapons.length) % weapons.length;
+      get().switchWeapon(prev);
+    },
+
+    getCurrentWeapon: () => {
+      const { weapons, currentWeaponIndex } = get();
+      return weapons[currentWeaponIndex] || null;
+    },
+
+    fire: () => {
+      const { weapons, currentWeaponIndex, ammo, isReloading, lastFireTime } = get();
+      const weapon = weapons[currentWeaponIndex];
+      if (!weapon || isReloading) return false;
+
+      const currentAmmo = ammo[weapon.weaponId] || 0;
+      if (currentAmmo <= 0) {
+        // Auto-reload
+        get().startReload();
+        return false;
+      }
+
+      // Check fire rate
+      const now = Date.now();
+      const fireInterval = 1000 / weapon.stats.fireRate;
+      if (now - lastFireTime < fireInterval) return false;
+
+      set({
+        ammo: { ...ammo, [weapon.weaponId]: currentAmmo - 1 },
+        lastFireTime: now,
+      });
+
+      return true;
+    },
+
+    startReload: () => {
+      const { weapons, currentWeaponIndex, ammo, reserveAmmo, isReloading } = get();
+      if (isReloading) return;
+
+      const weapon = weapons[currentWeaponIndex];
+      if (!weapon) return;
+
+      const currentAmmo = ammo[weapon.weaponId] || 0;
+      const reserve = reserveAmmo[weapon.weaponId] || 0;
+
+      if (currentAmmo >= weapon.stats.magazineSize || reserve <= 0) return;
+
+      set({ isReloading: true, reloadStartTime: Date.now() });
+    },
+
+    finishReload: () => {
+      const { weapons, currentWeaponIndex, ammo, reserveAmmo } = get();
+      const weapon = weapons[currentWeaponIndex];
+      if (!weapon) return;
+
+      const currentAmmo = ammo[weapon.weaponId] || 0;
+      const reserve = reserveAmmo[weapon.weaponId] || 0;
+      const needed = weapon.stats.magazineSize - currentAmmo;
+      const toLoad = Math.min(needed, reserve);
+
+      set({
+        ammo: { ...ammo, [weapon.weaponId]: currentAmmo + toLoad },
+        reserveAmmo: { ...reserveAmmo, [weapon.weaponId]: reserve - toLoad },
+        isReloading: false,
+        reloadStartTime: 0,
+      });
+    },
+
+    cancelReload: () => {
+      set({ isReloading: false, reloadStartTime: 0 });
+    },
+
+    addAmmo: (weaponId, amount) => {
+      const { reserveAmmo } = get();
+      set({
+        reserveAmmo: {
+          ...reserveAmmo,
+          [weaponId]: (reserveAmmo[weaponId] || 0) + amount,
+        },
+      });
+    },
+
+    addAmmoForType: (weaponType, amount) => {
+      const { weapons, reserveAmmo } = get();
+      const updates: Record<string, number> = {};
+      weapons.forEach((w) => {
+        if (w.type === weaponType) {
+          updates[w.weaponId] = (reserveAmmo[w.weaponId] || 0) + amount;
         }
-      }
-      
-      set({
-        activeQuests: activeQuests.filter(q => q.questId !== questId),
-        completedQuestIds: [...completedQuestIds, questId],
-        inventory: newInventory,
       });
-      
-      // Show notification
-      useNotificationStore.getState().showQuestCompleted(quest.title);
+      if (Object.keys(updates).length > 0) {
+        set({ reserveAmmo: { ...reserveAmmo, ...updates } });
+      }
     },
-    
-    getActiveQuest: (questId) => {
-      return get().activeQuests.find(q => q.questId === questId);
-    },
-    
-    updateRelationship: (npcId, delta) => {
-      const currentLevel = get().npcRelationships[npcId] ?? 0;
-      const newLevel = Math.max(0, Math.min(10, currentLevel + delta));
-      
+
+    // Stats
+    addKill: (scoreValue) => {
       set((state) => ({
-        npcRelationships: {
-          ...state.npcRelationships,
-          [npcId]: newLevel,
-        },
+        kills: state.kills + 1,
+        score: state.score + scoreValue,
       }));
-      
-      // Show notification for positive relationship changes
-      if (delta > 0 && newLevel > currentLevel) {
-        useNotificationStore.getState().showRelationshipUp(npcId);
-      }
     },
-    
-    getRelationship: (npcId) => {
-      return get().npcRelationships[npcId] ?? 0;
+
+    recordShot: (hit) => {
+      set((state) => ({
+        shotsTotal: state.shotsTotal + 1,
+        shotsHit: hit ? state.shotsHit + 1 : state.shotsHit,
+      }));
     },
-    
-    completeCookingStep: (stepId) => {
-      const { completedCookingSteps } = get();
-      if (!completedCookingSteps.includes(stepId)) {
-        set({
-          completedCookingSteps: [...completedCookingSteps, stepId],
-        });
-      }
+
+    getAccuracy: () => {
+      const { shotsTotal, shotsHit } = get();
+      if (shotsTotal === 0) return 0;
+      return Math.round((shotsHit / shotsTotal) * 100);
     },
-    
-    unlockTechnique: (techniqueId) => {
-      const { unlockedTechniques } = get();
-      if (!unlockedTechniques.includes(techniqueId)) {
-        set({
-          unlockedTechniques: [...unlockedTechniques, techniqueId],
-        });
-      }
-    },
-    
-    hasCompletedStep: (stepId) => {
-      return get().completedCookingSteps.includes(stepId);
-    },
-    
-    useStamina: (amount) => {
-      const { stamina } = get();
-      if (stamina < amount) return false;
-      set({ stamina: stamina - amount });
-      return true;
-    },
-    
-    restoreStamina: (amount) => {
-      const { stamina, maxStamina } = get();
-      set({ stamina: Math.min(maxStamina, stamina + amount) });
-    },
-    
-    // Check and auto-update gather objectives when items are collected
-    checkAndUpdateGatherObjectives: (itemId) => {
-      const { activeQuests, inventory } = get();
-      const itemCount = inventory.find(s => s.item.itemId === itemId)?.quantity || 0;
-      
-      let updated = false;
-      const completedObjectives: string[] = [];
-      
-      const updatedQuests = activeQuests.map(quest => {
-        const updatedObjectives = quest.objectives.map(obj => {
-          if (
-            obj.type === 'gather' &&
-            obj.target === itemId &&
-            !obj.completed &&
-            itemCount >= (obj.quantity || 1)
-          ) {
-            updated = true;
-            completedObjectives.push(obj.description);
-            return { ...obj, completed: true };
-          }
-          return obj;
-        });
-        return { ...quest, objectives: updatedObjectives };
-      });
-      
-      if (updated) {
-        set({ activeQuests: updatedQuests });
-        // Show notification for completed objectives
-        completedObjectives.forEach(desc => {
-          useNotificationStore.getState().showObjectiveCompleted(desc);
-        });
-      }
-    },
-    
-    // Check and auto-update talk objectives when talking to NPCs
-    checkAndUpdateTalkObjectives: (npcId) => {
-      const { activeQuests } = get();
-      
-      let updated = false;
-      const updatedQuests = activeQuests.map(quest => {
-        const updatedObjectives = quest.objectives.map(obj => {
-          if (
-            obj.type === 'talk' &&
-            obj.target === npcId &&
-            !obj.completed
-          ) {
-            updated = true;
-            return { ...obj, completed: true };
-          }
-          return obj;
-        });
-        return { ...quest, objectives: updatedObjectives };
-      });
-      
-      if (updated) {
-        set({ activeQuests: updatedQuests });
-      }
-    },
-    
-    // Mark an item as collected (to prevent respawn)
-    markCollected: (itemId) => {
-      const { collectedItemIds } = get();
-      if (!collectedItemIds.includes(itemId)) {
-        set({ collectedItemIds: [...collectedItemIds, itemId] });
-      }
-    },
-    
-    isCollected: (itemId) => {
-      return get().collectedItemIds.includes(itemId);
-    },
-    
-    // NPC conversation memory
-    addConversationMemory: (npcId, summary) => {
-      const { npcConversationMemory } = get();
-      const existing = npcConversationMemory[npcId] || [];
-      // Keep last 5 conversation summaries
-      const updated = [...existing, summary].slice(-5);
-      set({
-        npcConversationMemory: {
-          ...npcConversationMemory,
-          [npcId]: updated,
-        },
-      });
-    },
-    
-    getConversationMemory: (npcId) => {
-      return get().npcConversationMemory[npcId] || [];
-    },
-    
-    // Restore state from save
+
     restoreState: (state) => {
-      set({
-        ...state,
-        // Ensure arrays are initialized
-        inventory: state.inventory || [],
-        activeQuests: state.activeQuests || [],
-        completedQuestIds: state.completedQuestIds || [],
-        completedCookingSteps: state.completedCookingSteps || [],
-        unlockedTechniques: state.unlockedTechniques || [],
-        collectedItemIds: state.collectedItemIds || [],
-        npcConversationMemory: state.npcConversationMemory || {},
-        npcRelationships: state.npcRelationships || {},
-      });
+      set({ ...state });
     },
-    
+
     reset: () => set(initialState),
   }))
 );
-

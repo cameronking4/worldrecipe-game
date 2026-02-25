@@ -2,646 +2,452 @@ import { NextResponse } from 'next/server';
 import { gateway } from '@ai-sdk/gateway';
 import { generateObject } from 'ai';
 import { v4 as uuidv4 } from 'uuid';
-import { worldRecipeSchema } from '@/lib/ai/schemas';
-import { COZY_WORLD_SYSTEM_PROMPT, buildWorldGenerationPrompt } from '@/lib/ai/prompts';
-import { db } from '@/lib/db/client';
+import { missionSchema } from '@/lib/ai/schemas';
+import { FPS_WORLD_SYSTEM_PROMPT, buildMissionGenerationPrompt } from '@/lib/ai/prompts';
+import { db as _db } from '@/lib/db/client';
 import { worlds, aiGenerations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+
+// Cast db to any to avoid type issues with safe wrapper
+const db = _db as any;
 import crypto from 'crypto';
 
 // ============================================
-// World Generation API Endpoint
+// Mission Generation API Endpoint
 // ============================================
 
-export const maxDuration = 60; // Allow up to 60 seconds for generation
+export const maxDuration = 60;
 
-interface WorldGenerationRequest {
+interface MissionGenerationRequest {
   seed?: string;
-  dishPrompt: string;
+  missionTheme: string;
   playerPrefs?: {
-    difficulty?: 'easy' | 'medium' | 'hard';
-    regions?: number;
-    dietaryRestrictions?: string[];
+    difficulty?: 'easy' | 'medium' | 'hard' | 'nightmare';
+    waveCount?: number;
+    arenaTheme?: string;
   };
 }
 
-// Hash input for cache key
 function hashInput(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, 32);
 }
 
 export async function POST(request: Request) {
   try {
-    const body: WorldGenerationRequest = await request.json();
-    
-    if (!body.dishPrompt) {
-      return NextResponse.json(
-        { error: 'dishPrompt is required' },
-        { status: 400 }
-      );
+    const body: MissionGenerationRequest = await request.json();
+
+    if (!body.missionTheme) {
+      return NextResponse.json({ error: 'missionTheme is required' }, { status: 400 });
     }
-    
-    // Generate or use provided seed
+
     const seed = body.seed || uuidv4();
     const worldId = uuidv4();
-    
-    // Create cache key from input
+
     const cacheKey = hashInput(JSON.stringify({
-      dishPrompt: body.dishPrompt,
+      missionTheme: body.missionTheme,
       seed,
       playerPrefs: body.playerPrefs,
     }));
-    
-    // Check cache first (skip if database unavailable)
+
+    // Check cache
     try {
       const cached = await db.query.aiGenerations.findFirst({
         where: eq(aiGenerations.inputHash, cacheKey),
       });
-      
+
       if (cached) {
-        const cachedWorld = JSON.parse(cached.outputJson);
-        // Update worldId to be unique even for cached results
-        cachedWorld.worldId = worldId;
-        
-        // Store world in database (skip if fails)
+        const cachedMission = JSON.parse(cached.outputJson);
+        const world = {
+          worldId,
+          seed,
+          mission: cachedMission,
+          colorSystem: {
+            uiTokens: cachedMission.arena?.palette || {},
+            environmentTokens: {},
+          },
+        };
+
         try {
           await db.insert(worlds).values({
             worldId,
             seed,
-            dishName: cachedWorld.dish.name,
+            dishName: cachedMission.name || 'Mission',
             modelVersion: 'cached',
-            promptVersion: '1.0',
-            worldJson: JSON.stringify(cachedWorld),
+            promptVersion: '2.0',
+            worldJson: JSON.stringify(world),
           });
         } catch (dbError) {
-          console.warn('Failed to store cached world in database:', dbError);
+          console.warn('Failed to store cached world:', dbError);
         }
-        
-        return NextResponse.json({
-          worldId,
-          world: cachedWorld,
-          cached: true,
-        });
+
+        return NextResponse.json({ worldId, world, cached: true });
       }
     } catch (dbError) {
-      // Database unavailable - continue without cache
-      console.warn('Database unavailable, skipping cache check:', dbError);
+      console.warn('Database unavailable:', dbError);
     }
-    
-    // Build the prompt
-    const prompt = buildWorldGenerationPrompt(
-      body.dishPrompt,
+
+    // Generate with AI
+    const prompt = buildMissionGenerationPrompt(
+      body.missionTheme,
       seed,
       body.playerPrefs
     );
-    
-    // Generate with AI Gateway
-    let world, usage;
+
+    let mission, usage;
     try {
       const result = await generateObject({
         model: gateway('openai/gpt-4o'),
-        schema: worldRecipeSchema,
-        system: COZY_WORLD_SYSTEM_PROMPT,
+        schema: missionSchema,
+        system: FPS_WORLD_SYSTEM_PROMPT,
         prompt,
         temperature: 0.7,
       });
-      world = result.object;
+      mission = result.object;
       usage = result.usage;
     } catch (schemaError: any) {
-      // If schema validation fails, log and use fallback
       console.error('Schema validation failed:', schemaError);
-      if (process.env.NODE_ENV === 'development') {
-        const fallbackWorld = createFallbackWorld();
-        return NextResponse.json({
-          worldId: fallbackWorld.worldId,
-          world: fallbackWorld,
-          fallback: true,
-          error: 'Schema validation failed - using fallback world',
-          schemaErrors: schemaError.cause?.issues || [],
-        });
-      }
-      throw schemaError; // Re-throw in production
-    }
-    
-    // Set the worldId and seed
-    world.worldId = worldId;
-    world.seed = seed;
-    
-    // Validate referential integrity
-    const validationErrors = validateWorldRecipe(world);
-    if (validationErrors.length > 0) {
-      console.warn('World validation warnings:', validationErrors);
-      // Auto-fix common issues
-      world.questArcs = fixQuestReferences(world);
-    }
-    
-    // Store in database (skip if database unavailable)
-    try {
-      await db.insert(worlds).values({
-        worldId,
-        seed,
-        dishName: world.dish.name,
-        modelVersion: 'gpt-4o',
-        promptVersion: '1.0',
-        worldJson: JSON.stringify(world),
-      });
-      
-      // Cache the generation
-      await db.insert(aiGenerations).values({
-        generationId: uuidv4(),
-        worldId,
-        generationType: 'world',
-        inputHash: cacheKey,
-        outputJson: JSON.stringify(world),
-        modelUsed: 'gpt-4o',
-        tokensUsed: usage?.totalTokens,
-      });
-    } catch (dbError) {
-      // Database unavailable - continue without persistence
-      console.warn('Database unavailable, skipping world storage:', dbError);
-    }
-    
-    return NextResponse.json({
-      worldId,
-      world,
-      cached: false,
-      usage: {
-        totalTokens: usage?.totalTokens,
-      },
-    });
-  } catch (error) {
-    console.error('World generation error:', error);
-    
-    // Return a fallback world for development
-    if (process.env.NODE_ENV === 'development') {
       const fallbackWorld = createFallbackWorld();
       return NextResponse.json({
         worldId: fallbackWorld.worldId,
         world: fallbackWorld,
         fallback: true,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Schema validation failed - using fallback mission',
       });
     }
-    
-    return NextResponse.json(
-      { error: 'Failed to generate world', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+
+    const world = {
+      worldId,
+      seed,
+      mission,
+      colorSystem: {
+        uiTokens: mission.arena?.palette || {},
+        environmentTokens: {},
+      },
+    };
+
+    // Store in database
+    try {
+      await db.insert(worlds).values({
+        worldId,
+        seed,
+        dishName: mission.name,
+        modelVersion: 'gpt-4o',
+        promptVersion: '2.0',
+        worldJson: JSON.stringify(world),
+      });
+
+      await db.insert(aiGenerations).values({
+        generationId: uuidv4(),
+        worldId,
+        generationType: 'mission',
+        inputHash: cacheKey,
+        outputJson: JSON.stringify(mission),
+        modelUsed: 'gpt-4o',
+        tokensUsed: usage?.totalTokens,
+      });
+    } catch (dbError) {
+      console.warn('Database unavailable:', dbError);
+    }
+
+    return NextResponse.json({
+      worldId,
+      world,
+      cached: false,
+      usage: { totalTokens: usage?.totalTokens },
+    });
+  } catch (error) {
+    console.error('Mission generation error:', error);
+
+    const fallbackWorld = createFallbackWorld();
+    return NextResponse.json({
+      worldId: fallbackWorld.worldId,
+      world: fallbackWorld,
+      fallback: true,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
-// GET endpoint to retrieve existing world
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const worldId = searchParams.get('worldId');
-    
+
     if (!worldId) {
-      // Return list of all worlds
       const allWorlds = await db.query.worlds.findMany({
-        columns: {
-          worldId: true,
-          dishName: true,
-          seed: true,
-          createdAt: true,
-        },
-        orderBy: (worlds, { desc }) => [desc(worlds.createdAt)],
+        columns: { worldId: true, dishName: true, seed: true, createdAt: true },
+        orderBy: (w: any, { desc }: any) => [desc(w.createdAt)],
         limit: 10,
       });
-      
       return NextResponse.json({ worlds: allWorlds });
     }
-    
-    // Return specific world
+
     const world = await db.query.worlds.findFirst({
       where: eq(worlds.worldId, worldId),
     });
-    
+
     if (!world) {
-      return NextResponse.json(
-        { error: 'World not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'World not found' }, { status: 404 });
     }
-    
-    return NextResponse.json({
-      worldId: world.worldId,
-      world: JSON.parse(world.worldJson),
-    });
+
+    return NextResponse.json({ worldId: world.worldId, world: JSON.parse(world.worldJson) });
   } catch (error) {
     console.error('World retrieval error:', error);
-    return NextResponse.json(
-      { error: 'Failed to retrieve world' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to retrieve world' }, { status: 500 });
   }
 }
 
 // ============================================
-// Validation Helpers
-// ============================================
-
-function validateWorldRecipe(world: any): string[] {
-  const errors: string[] = [];
-  const npcIds = new Set(world.npcRoster.map((n: any) => n.npcId));
-  const regionIds = new Set(world.regions.map((r: any) => r.regionId));
-  const ingredientIds = new Set(world.ingredientGraph.ingredients.map((i: any) => i.ingredientId));
-  
-  // Check quest givers exist
-  for (const arc of world.questArcs) {
-    for (const chapter of arc.chapters) {
-      if (!npcIds.has(chapter.giverNpcId)) {
-        errors.push(`Quest ${chapter.questId} references non-existent NPC: ${chapter.giverNpcId}`);
-      }
-    }
-  }
-  
-  // Check NPC schedules reference valid POIs (POIs can be at region or mapSpec level)
-  for (const npc of world.npcRoster) {
-    for (const schedule of npc.schedule) {
-      const validPoi = world.regions.some((r: any) => {
-        const regionPois = r.pois || [];
-        const mapSpecPois = r.mapSpec?.pois || [];
-        const allPois = [...regionPois, ...mapSpecPois];
-        return allPois.some((p: any) => p.poiId === schedule.locationId);
-      });
-      if (!validPoi) {
-        errors.push(`NPC ${npc.npcId} schedule references invalid POI: ${schedule.locationId}`);
-      }
-    }
-  }
-  
-  // Check ingredient regions exist
-  for (const ingredient of world.ingredientGraph.ingredients) {
-    if (!regionIds.has(ingredient.regionId)) {
-      errors.push(`Ingredient ${ingredient.ingredientId} references non-existent region: ${ingredient.regionId}`);
-    }
-  }
-  
-  return errors;
-}
-
-function fixQuestReferences(world: any): any[] {
-  const npcIds = new Set(world.npcRoster.map((n: any) => n.npcId));
-  const firstNpcId = world.npcRoster[0]?.npcId || 'npc_default';
-  
-  return world.questArcs.map((arc: any) => ({
-    ...arc,
-    chapters: arc.chapters.map((chapter: any) => ({
-      ...chapter,
-      giverNpcId: npcIds.has(chapter.giverNpcId) ? chapter.giverNpcId : firstNpcId,
-    })),
-  }));
-}
-
-// ============================================
-// Portal Board Generation Helper
-// ============================================
-
-function createPortalBoards(worldId: string, ingredients: any[], npcRoster: any[]): any[] {
-  const portalTypes: Array<{ type: string; name: string; description: string; ingredientFilter: (i: any) => boolean }> = [
-    {
-      type: 'farm',
-      name: 'Sunny Farm',
-      description: 'A peaceful farm with fresh vegetables and grains',
-      ingredientFilter: (i) => i.category === 'vegetable' || i.category === 'grain' || i.gatherMethod === 'harvest',
-    },
-    {
-      type: 'grocery_store',
-      name: 'Village Market',
-      description: 'A bustling market with packaged goods and trade items',
-      ingredientFilter: (i) => i.gatherMethod === 'trade' || i.category === 'grain',
-    },
-    {
-      type: 'foraging_grounds',
-      name: 'Wild Foraging Grounds',
-      description: 'A natural area rich with wild mushrooms and herbs',
-      ingredientFilter: (i) => i.gatherMethod === 'forage' || i.gatherMethod === 'pickup' || i.category === 'spice',
-    },
-    {
-      type: 'exotic_garden',
-      name: 'Exotic Garden',
-      description: 'A mystical garden with rare spices and special ingredients',
-      ingredientFilter: (i) => i.category === 'spice' || i.rarity === 'rare' || i.rarity === 'legendary',
-    },
-    {
-      type: 'kitchen',
-      name: 'Master Kitchen',
-      description: 'The ultimate cooking station - unlock when you have all ingredients',
-      ingredientFilter: () => false, // Kitchen has no ingredients, it's for cooking
-    },
-  ];
-  
-  const portalBoards = portalTypes.map((portalInfo, index) => {
-    const boardId = `portal_${portalInfo.type}_${worldId}`;
-    
-    // Filter ingredients for this portal
-    const portalIngredients = portalInfo.type === 'kitchen' 
-      ? [] 
-      : ingredients.filter(portalInfo.ingredientFilter).slice(0, 5);
-    
-    // Create NPC for this portal (reuse existing NPCs or create simple ones)
-    const portalNpc = npcRoster[index % npcRoster.length] || {
-      npcId: `npc_portal_${portalInfo.type}`,
-      name: portalInfo.type === 'farm' ? 'Farmer' : portalInfo.type === 'grocery_store' ? 'Merchant' : 'Guide',
-      speciesStyle: 'cozy animal',
-      personality: {
-        archetype: 'Helper',
-        traits: ['friendly', 'helpful'],
-        speakingStyle: 'casual',
-        likes: ['helping', 'sharing'],
-        dislikes: ['trouble'],
-      },
-      role: {
-        job: portalInfo.type === 'farm' ? 'Farmer' : portalInfo.type === 'grocery_store' ? 'Merchant' : 'Guide',
-        services: ['ingredient help', 'tips'],
-      },
-      schedule: [{ timeOfDay: 'day' as const, locationId: boardId, activity: 'working' }],
-      relationship: { startingLevel: 0, maxLevel: 5, levelRewards: [] },
-      questHooks: [],
-      visual: { outfitTags: [], accessoryTags: [] },
-    };
-    
-    return {
-      boardId,
-      portalType: portalInfo.type,
-      name: portalInfo.name,
-      description: portalInfo.description,
-      mapSpec: {
-        grid: { width: 40, height: 40, cellSize: 1 },
-        terrain: {
-          waterBodies: [],
-          elevationHints: [],
-          paths: [],
-        },
-        pois: [
-          {
-            poiId: `return_portal_${boardId}`,
-            type: 'portal' as const,
-            name: 'Return to Hub',
-            position: { x: 5, y: 5 },
-            interactRadius: 2,
-            isReturnPortal: true,
-          },
-        ],
-        spawnPoints: {
-          player: { x: 20, y: 20 },
-          npcSpawns: [{ npcId: portalNpc.npcId, position: { x: 20, y: 25 } }],
-        },
-        decorRules: { density: 0.3, propThemes: [portalInfo.type] },
-      },
-      npc: portalNpc,
-      ingredients: portalIngredients,
-      spawnPoint: { x: 20, y: 20 },
-      palette: {
-        primary: portalInfo.type === 'farm' ? '#90EE90' : portalInfo.type === 'grocery_store' ? '#FFD700' : '#9370DB',
-        secondary: '#B6D0E2',
-        accent: '#FF6B6B',
-        ground: '#C4A484',
-        foliage: '#4A7C59',
-        sky: '#87CEEB',
-        uiBg: '#1a1a2e',
-        uiText: '#ffffff',
-      },
-    };
-  });
-  
-  return portalBoards;
-}
-
-// ============================================
-// Fallback World for Development
+// Fallback World
 // ============================================
 
 function createFallbackWorld() {
   const worldId = uuidv4();
-  
-  const ingredients = [
-    { ingredientId: 'ing_noodles', name: 'Fresh Noodles', category: 'grain', regionId: 'region_harbor', gatherMethod: 'trade' as const },
-    { ingredientId: 'ing_pork', name: 'Chashu Pork', category: 'protein', regionId: 'region_harbor', gatherMethod: 'trade' as const },
-    { ingredientId: 'ing_egg', name: 'Soft-Boiled Egg', category: 'protein', regionId: 'region_harbor', gatherMethod: 'pickup' as const },
-    { ingredientId: 'ing_egg_2', name: 'Farm Egg', category: 'protein', regionId: 'region_harbor', gatherMethod: 'pickup' as const },
-    { ingredientId: 'ing_seaweed', name: 'Nori Seaweed', category: 'vegetable', regionId: 'region_harbor', gatherMethod: 'harvest' as const },
-    { ingredientId: 'ing_seaweed_2', name: 'Dried Seaweed', category: 'vegetable', regionId: 'region_harbor', gatherMethod: 'harvest' as const },
-    { ingredientId: 'ing_scallion', name: 'Fresh Scallions', category: 'vegetable', regionId: 'region_harbor', gatherMethod: 'harvest' as const },
-    { ingredientId: 'ing_garlic', name: 'Wild Garlic', category: 'spice', regionId: 'region_harbor', gatherMethod: 'pickup' as const },
-    { ingredientId: 'ing_ginger', name: 'Fresh Ginger', category: 'spice', regionId: 'region_harbor', gatherMethod: 'harvest' as const },
-    { ingredientId: 'ing_mushroom', name: 'Shiitake Mushroom', category: 'vegetable', regionId: 'region_harbor', gatherMethod: 'pickup' as const },
-    { ingredientId: 'ing_bamboo', name: 'Bamboo Shoot', category: 'vegetable', regionId: 'region_harbor', gatherMethod: 'harvest' as const },
-    { ingredientId: 'ing_broth', name: 'Pork Bone Broth', category: 'liquid', regionId: 'region_harbor', gatherMethod: 'craft' as const },
-  ];
-  
-  const npcRoster = [
-    {
-      npcId: 'npc_chef_hana',
-      name: 'Chef Hana',
-      speciesStyle: 'Friendly human chef',
-      personality: {
-        archetype: 'Mentor',
-        traits: ['patient', 'passionate', 'encouraging'],
-        speakingStyle: 'Warm and nurturing, uses cooking metaphors',
-        likes: ['sharing recipes', 'fresh ingredients', 'eager students'],
-        dislikes: ['food waste', 'impatience'],
-      },
-      role: {
-        job: 'Head Chef',
-        services: ['cooking lessons', 'recipe hints', 'ingredient trades'],
-      },
-      schedule: [
-        { timeOfDay: 'morning' as const, locationId: 'poi_market', activity: 'Selecting fresh ingredients' },
-        { timeOfDay: 'day' as const, locationId: 'poi_kitchen', activity: 'Teaching cooking' },
-        { timeOfDay: 'evening' as const, locationId: 'poi_kitchen', activity: 'Preparing dinner' },
-      ],
-      relationship: {
-        startingLevel: 1,
-        maxLevel: 10,
-        levelRewards: ['Basic recipes', 'Advanced techniques', 'Secret family recipe'],
-      },
-      questHooks: ['arc_first_broth'],
-      visual: {
-        outfitTags: ['chef_coat', 'apron'],
-        accessoryTags: ['chef_hat', 'ladle'],
-      },
-    },
-    {
-      npcId: 'npc_fisher_kai',
-      name: 'Kai',
-      speciesStyle: 'Weathered fisherman',
-      personality: {
-        archetype: 'Provider',
-        traits: ['hardy', 'quiet', 'generous'],
-        speakingStyle: 'Few words but meaningful, knows the sea',
-        likes: ['early mornings', 'the ocean', 'good stories'],
-        dislikes: ['storms', 'wastefulness'],
-      },
-      role: {
-        job: 'Fisherman',
-        services: ['fresh fish trades', 'fishing tips', 'boat rides'],
-      },
-      schedule: [
-        { timeOfDay: 'morning' as const, locationId: 'poi_dock', activity: 'Preparing nets' },
-        { timeOfDay: 'day' as const, locationId: 'poi_dock', activity: 'Selling catch' },
-        { timeOfDay: 'evening' as const, locationId: 'poi_market', activity: 'Enjoying dinner' },
-      ],
-      relationship: {
-        startingLevel: 0,
-        maxLevel: 8,
-        levelRewards: ['Fishing lessons', 'Best fishing spots', 'Family boat access'],
-      },
-      questHooks: [],
-      visual: {
-        outfitTags: ['raincoat', 'boots'],
-        accessoryTags: ['fishing_hat', 'net'],
-      },
-    },
-  ];
-  
-  const portalBoards = createPortalBoards(worldId, ingredients, npcRoster);
-  
-  // Create portal POIs in hub
-  const portalPois = portalBoards.map((pb, index) => {
-    const angle = (index / portalBoards.length) * Math.PI * 2;
-    const distance = 15;
-    const x = 20 + Math.cos(angle) * distance;
-    const y = 20 + Math.sin(angle) * distance;
-    
-    return {
-      poiId: `portal_poi_${pb.portalType}`,
-      type: 'portal' as const,
-      name: pb.name,
-      position: { x, y },
-      interactRadius: 3,
-      portalType: pb.portalType,
-      destinationBoardId: pb.boardId,
-      requiredIngredients: pb.portalType === 'kitchen' ? ingredients.map(i => i.ingredientId) : undefined,
-    };
-  });
-  
+
   return {
     worldId,
     seed: 'fallback-seed',
-    dish: {
-      name: 'Simple Ramen',
-      tagline: 'A warm bowl of comfort',
-      inspirations: ['Japanese cuisine', 'Street food culture'],
-      dietaryTags: ['contains gluten'],
+    mission: {
+      missionId: 'mission_default',
+      name: 'Training Grounds',
+      briefing: 'Welcome to the Training Grounds, soldier. Enemy AI constructs have been detected in the area. Clear all waves to complete the mission.',
       difficulty: 'medium' as const,
-      storyHook: 'Master the art of the perfect broth on your culinary journey.',
-    },
-    regions: [
-      {
-        regionId: 'region_harbor',
-        name: 'Misty Harbor',
-        inspiration: {
-          countryOrArea: 'Coastal fishing village',
-          notes: 'A peaceful port town known for fresh seafood',
-          avoidStereotypesChecklist: ['Avoid generic Asian stereotypes'],
-        },
-        biomes: ['coastal', 'temperate'],
+      arena: {
+        arenaId: 'arena_training',
+        name: 'Training Arena',
+        description: 'A standard combat arena for testing your skills',
+        theme: 'industrial' as const,
+        width: 50,
+        height: 50,
+        playerSpawn: [0, 1, 0] as [number, number, number],
+        enemySpawnPoints: [
+          [-20, 1, -20] as [number, number, number],
+          [20, 1, -20] as [number, number, number],
+          [-20, 1, 20] as [number, number, number],
+          [20, 1, 20] as [number, number, number],
+          [0, 1, -22] as [number, number, number],
+          [0, 1, 22] as [number, number, number],
+        ],
+        coverObjects: [
+          { position: [-8, 0.75, -5] as [number, number, number], size: [2, 1.5, 1] as [number, number, number], type: 'crate' as const, destructible: false },
+          { position: [8, 0.75, -5] as [number, number, number], size: [2, 1.5, 1] as [number, number, number], type: 'crate' as const, destructible: false },
+          { position: [-5, 1, 5] as [number, number, number], size: [1, 2, 3] as [number, number, number], type: 'wall' as const, destructible: false },
+          { position: [5, 1, 5] as [number, number, number], size: [1, 2, 3] as [number, number, number], type: 'wall' as const, destructible: false },
+          { position: [0, 1.5, -10] as [number, number, number], size: [1, 3, 1] as [number, number, number], type: 'pillar' as const, destructible: false },
+          { position: [-12, 0.6, 0] as [number, number, number], size: [3, 1.2, 1.5] as [number, number, number], type: 'barrier' as const, destructible: false },
+          { position: [12, 0.6, 0] as [number, number, number], size: [3, 1.2, 1.5] as [number, number, number], type: 'barrier' as const, destructible: false },
+          { position: [0, 0.75, 8] as [number, number, number], size: [4, 1.5, 1] as [number, number, number], type: 'wall' as const, destructible: false },
+        ],
+        pickupLocations: [
+          { position: [-10, 0.5, -10] as [number, number, number], type: 'health' as const },
+          { position: [10, 0.5, 10] as [number, number, number], type: 'ammo' as const },
+          { position: [-10, 0.5, 10] as [number, number, number], type: 'health' as const },
+          { position: [10, 0.5, -10] as [number, number, number], type: 'ammo' as const },
+        ],
         palette: {
-          primary: '#5B8FB9',
-          secondary: '#B6D0E2',
-          accent: '#FF6B6B',
-          ground: '#C4A484',
-          foliage: '#4A7C59',
-          sky: '#87CEEB',
-          uiBg: '#1a1a2e',
-          uiText: '#ffffff',
+          ground: '#3a3a4a',
+          walls: '#2a2a3a',
+          accent: '#FF4444',
+          sky: '#1a1a2a',
+          fog: '#222233',
+          emissive: '#FF6644',
         },
-        mapSpec: {
-          grid: { width: 40, height: 40, cellSize: 1 },
-          terrain: {
-            waterBodies: [{ position: { x: 35, y: 20 }, size: { width: 10, height: 15 } }],
-            elevationHints: [{ position: { x: 5, y: 5 }, height: 2 }],
-            paths: [
-              { from: { x: 20, y: 20 }, to: { x: 30, y: 20 } },
-              { from: { x: 20, y: 20 }, to: { x: 10, y: 15 } },
-            ],
-          },
-          pois: [
-            { poiId: 'poi_market', type: 'market' as const, name: 'Harbor Market', position: { x: 10, y: 15 }, interactRadius: 3 },
-            { poiId: 'poi_dock', type: 'dock' as const, name: 'Fish Dock', position: { x: 30, y: 20 }, interactRadius: 3 },
-            { poiId: 'poi_kitchen', type: 'kitchen_hut' as const, name: 'Seaside Kitchen', position: { x: 20, y: 25 }, interactRadius: 3 },
-            ...portalPois,
-          ],
-          spawnPoints: {
-            player: { x: 20, y: 20 },
-            npcSpawns: [
-              { npcId: 'npc_chef_hana', position: { x: 20, y: 25 } },
-              { npcId: 'npc_fisher_kai', position: { x: 30, y: 20 } },
-            ],
-          },
-          decorRules: { density: 0.3, propThemes: ['coastal', 'fishing'] },
-        },
+        ambientDescription: 'A dimly lit industrial arena with metallic walls and scattered crates for cover.',
       },
-    ],
-    ingredientGraph: {
-      ingredients,
-      dependencies: [
-        { from: 'ing_pork', to: 'ing_broth', type: 'requires' as const },
+      waves: [
+        {
+          waveNumber: 1,
+          enemies: [{ enemyTypeId: 'enemy_drone', count: 3, delay: 0 }],
+          spawnPoints: [[-20, 1, -20], [20, 1, -20], [0, 1, -22]] as [number, number, number][],
+          difficultyMultiplier: 1.0,
+          intermissionDuration: 8,
+        },
+        {
+          waveNumber: 2,
+          enemies: [
+            { enemyTypeId: 'enemy_drone', count: 3, delay: 0 },
+            { enemyTypeId: 'enemy_heavy', count: 1, delay: 3 },
+          ],
+          spawnPoints: [[-20, 1, -20], [20, 1, 20], [-20, 1, 20], [20, 1, -20]] as [number, number, number][],
+          difficultyMultiplier: 1.2,
+          intermissionDuration: 8,
+        },
+        {
+          waveNumber: 3,
+          enemies: [
+            { enemyTypeId: 'enemy_scout', count: 4, delay: 0 },
+            { enemyTypeId: 'enemy_drone', count: 2, delay: 2 },
+          ],
+          spawnPoints: [[-20, 1, -20], [20, 1, -20], [-20, 1, 20], [20, 1, 20]] as [number, number, number][],
+          difficultyMultiplier: 1.4,
+          intermissionDuration: 8,
+        },
+        {
+          waveNumber: 4,
+          enemies: [
+            { enemyTypeId: 'enemy_drone', count: 3, delay: 0 },
+            { enemyTypeId: 'enemy_heavy', count: 2, delay: 2 },
+            { enemyTypeId: 'enemy_scout', count: 2, delay: 4 },
+          ],
+          spawnPoints: [[-20, 1, -20], [20, 1, -20], [-20, 1, 20], [20, 1, 20], [0, 1, -22], [0, 1, 22]] as [number, number, number][],
+          difficultyMultiplier: 1.6,
+          intermissionDuration: 10,
+        },
+        {
+          waveNumber: 5,
+          enemies: [
+            { enemyTypeId: 'enemy_elite', count: 1, delay: 0 },
+            { enemyTypeId: 'enemy_heavy', count: 2, delay: 2 },
+            { enemyTypeId: 'enemy_drone', count: 4, delay: 3 },
+            { enemyTypeId: 'enemy_scout', count: 3, delay: 4 },
+          ],
+          spawnPoints: [[-20, 1, -20], [20, 1, -20], [-20, 1, 20], [20, 1, 20], [0, 1, -22], [0, 1, 22]] as [number, number, number][],
+          bonusObjective: 'Defeat the Elite without taking damage',
+          difficultyMultiplier: 2.0,
+          intermissionDuration: 5,
+        },
+      ],
+      enemyTypes: [
+        {
+          enemyTypeId: 'enemy_drone',
+          name: 'Combat Drone',
+          description: 'Standard combat unit with balanced stats',
+          behavior: 'rusher' as const,
+          health: 60,
+          speed: 4,
+          damage: 10,
+          attackRange: 8,
+          attackCooldown: 1.5,
+          color: '#FF4444',
+          scale: 1.0,
+          scoreValue: 100,
+          taunts: ['TARGET ACQUIRED.', 'INITIATING COMBAT PROTOCOL.', 'YOU CANNOT ESCAPE.'],
+        },
+        {
+          enemyTypeId: 'enemy_scout',
+          name: 'Recon Scout',
+          description: 'Fast and agile, flanks from the sides',
+          behavior: 'flanker' as const,
+          health: 40,
+          speed: 7,
+          damage: 8,
+          attackRange: 6,
+          attackCooldown: 1.0,
+          color: '#44FF44',
+          scale: 0.8,
+          scoreValue: 150,
+          taunts: ['CATCH ME IF YOU CAN!', 'TOO SLOW, HUMAN.', 'FLANKING INITIATED.'],
+        },
+        {
+          enemyTypeId: 'enemy_heavy',
+          name: 'Heavy Sentinel',
+          description: 'Slow but heavily armored tank unit',
+          behavior: 'tank' as const,
+          health: 200,
+          speed: 2,
+          damage: 20,
+          attackRange: 10,
+          attackCooldown: 2.5,
+          color: '#4444FF',
+          scale: 1.5,
+          scoreValue: 250,
+          taunts: ['I AM INDESTRUCTIBLE.', 'YOUR WEAPONS ARE INADEQUATE.', 'PREPARE FOR ANNIHILATION.'],
+        },
+        {
+          enemyTypeId: 'enemy_elite',
+          name: 'Elite Commander',
+          description: 'Boss-class enemy with high stats and sniper behavior',
+          behavior: 'sniper' as const,
+          health: 400,
+          speed: 3,
+          damage: 30,
+          attackRange: 20,
+          attackCooldown: 2.0,
+          color: '#FF44FF',
+          scale: 1.8,
+          scoreValue: 500,
+          taunts: ['I AM THE FINAL PROTOCOL.', 'YOUR DEFEAT WAS CALCULATED.', 'WITNESS TRUE AI SUPREMACY.'],
+        },
+      ],
+      availableWeapons: [
+        {
+          weaponId: 'weapon_pistol_default',
+          name: 'Sidearm P7',
+          description: 'Reliable standard-issue pistol',
+          type: 'pistol' as const,
+          stats: {
+            damage: 20,
+            fireRate: 4,
+            reloadTime: 1.2,
+            magazineSize: 12,
+            maxAmmo: 120,
+            spread: 0.02,
+            range: 50,
+            projectileSpeed: 80,
+            knockback: 2,
+          },
+          rarity: 'common' as const,
+          color: '#8899AA',
+        },
+        {
+          weaponId: 'weapon_rifle_ar1',
+          name: 'Pulse Rifle AR-1',
+          description: 'Full-auto assault rifle with moderate damage',
+          type: 'rifle' as const,
+          stats: {
+            damage: 15,
+            fireRate: 8,
+            reloadTime: 1.8,
+            magazineSize: 30,
+            maxAmmo: 180,
+            spread: 0.04,
+            range: 60,
+            projectileSpeed: 100,
+            knockback: 3,
+          },
+          rarity: 'uncommon' as const,
+          color: '#44AAFF',
+        },
+        {
+          weaponId: 'weapon_shotgun_sg2',
+          name: 'Scatter Cannon SG-2',
+          description: 'Devastating at close range',
+          type: 'shotgun' as const,
+          stats: {
+            damage: 60,
+            fireRate: 1.2,
+            reloadTime: 2.5,
+            magazineSize: 6,
+            maxAmmo: 36,
+            spread: 0.15,
+            range: 15,
+            projectileSpeed: 60,
+            knockback: 10,
+          },
+          rarity: 'uncommon' as const,
+          color: '#FFAA44',
+        },
+      ],
+      storyline: 'Rogue AI constructs have taken over the training facility. As the last human operative, you must clear the arena wave by wave to regain control.',
+      completionMessage: 'Mission accomplished! The training facility has been secured. Your performance has been recorded.',
+      rewards: [
+        { type: 'title' as const, value: 'Arena Champion' },
+        { type: 'score_multiplier' as const, value: '1.5x' },
       ],
     },
-    questArcs: [
-      {
-        arcId: 'arc_first_broth',
-        title: 'The Foundation',
-        chapters: [
-          {
-            questId: 'quest_meet_chef',
-            title: 'Meet the Chef',
-            description: 'Find Chef Hana at the Seaside Kitchen',
-            giverNpcId: 'npc_chef_hana',
-            objectives: [
-              { objectiveId: 'obj_talk_hana', type: 'talk' as const, description: 'Talk to Chef Hana', target: 'npc_chef_hana', quantity: 1, completed: false },
-            ],
-            rewards: [],
-            nextQuestId: 'quest_gather_basics',
-          },
-          {
-            questId: 'quest_gather_basics',
-            title: 'Gathering the Basics',
-            description: 'Collect the essential ingredients for your first broth',
-            giverNpcId: 'npc_chef_hana',
-            objectives: [
-              { objectiveId: 'obj_get_noodles', type: 'gather' as const, description: 'Acquire fresh noodles', target: 'ing_noodles', quantity: 1, completed: false },
-              { objectiveId: 'obj_get_egg', type: 'gather' as const, description: 'Find a fresh egg', target: 'ing_egg', quantity: 2, completed: false },
-            ],
-            rewards: [
-              {
-                item: {
-                  itemId: 'item_chopsticks',
-                  name: 'Wooden Chopsticks',
-                  description: 'A pair of handcrafted chopsticks',
-                  category: 'tool' as const,
-                  icon: '🥢',
-                  rarity: 'common' as const,
-                },
-                quantity: 1,
-              },
-            ],
-          },
-        ],
-        unlocksCookingStepId: 'step_prepare_broth',
-      },
-    ],
-    npcRoster,
-    portalBoards,
     colorSystem: {
       uiTokens: {
-        primary: '#FF6B6B',
-        secondary: '#4ECDC4',
-        accent: '#FFE66D',
-        background: '#1a1a2e',
+        primary: '#FF4444',
+        secondary: '#44AAFF',
+        accent: '#FFAA44',
+        background: '#1a1a2a',
         text: '#ffffff',
       },
       environmentTokens: {
-        skyDay: '#87CEEB',
-        skyEvening: '#FF7F50',
-        ground: '#4A7C59',
-        water: '#5B8FB9',
+        sky: '#1a1a2a',
+        fog: '#222233',
+        ground: '#3a3a4a',
       },
     },
-    startingInventory: [],
   };
 }
-

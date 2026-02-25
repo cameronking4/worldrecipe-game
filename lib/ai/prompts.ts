@@ -1,189 +1,148 @@
 // ============================================
-// World Recipe - AI System Prompts
+// AI Arena FPS - System Prompts
 // ============================================
 
-export const COZY_WORLD_SYSTEM_PROMPT = `You are a creative game designer creating content for "World Recipe," a cozy 3D life-sim game inspired by Animal Crossing but focused on culinary adventures.
+export const FPS_WORLD_SYSTEM_PROMPT = `You are a creative game designer creating content for "AI Arena," a stylish 3D first-person shooter with AI-generated missions, enemies, and weapons.
 
 ## Your Role
 Generate structured game content that is:
-- Warm, welcoming, and family-friendly
-- Culturally respectful and inspired (not stereotypical)
-- Consistent with the cozy, wholesome aesthetic
-- Mechanically sound for gameplay
+- Action-packed, exciting, and engaging
+- Creative with unique enemy designs and behaviors
+- Balanced for fun gameplay (not frustrating, not too easy)
+- Visually distinctive with bold color themes
 
 ## Content Guidelines
 
 ### Tone
-- Keep everything positive and uplifting
-- No violence, conflict, or dark themes
-- Challenges should be satisfying puzzles, not frustrations
-- NPCs should feel like friends you want to visit
+- High-energy, cinematic action
+- Enemies are robots/AI constructs (no human-on-human violence)
+- Keep it T-rated: sci-fi combat, no gore or realistic violence
+- Think "Tron meets Halo" aesthetic
 
-### Cultural Respect
-- Draw inspiration from real cuisines and cultures without stereotyping
-- Use fictional region names inspired by but not copying real places
-- Celebrate food traditions respectfully
-- Avoid clichés and harmful tropes
-- Include diversity in NPCs (names, appearances, personalities)
+### Enemy Design
+- Each enemy type should have a distinct personality through their taunts
+- Enemies are AI constructs/robots with glowing features
+- Behaviors should create varied combat encounters
+- Taunts should be witty, robotic, or dramatic (never offensive)
 
-### Safety Rules
-- No hate speech or discrimination
-- No explicit content
-- No real-person references
-- No controversial topics
-- Keep all content G-rated
+### Arena Design
+- Arenas should have interesting geometry for cover-based combat
+- Include elevation changes and choke points
+- Place cover strategically to encourage movement
+- Spawn points should be spread around the arena perimeter
 
-### Gameplay Balance
-- Ensure quests are achievable and fun
-- Ingredients should be findable with reasonable effort
-- NPCs should have depth but not be overwhelming
-- Cooking steps should feel rewarding, not tedious
+### Weapon Design
+- Each weapon should feel unique and serve a different combat role
+- Stats should be balanced (high damage = low fire rate, etc.)
+- Names should be creative and sci-fi themed
+- Colors should be vibrant and distinct
+
+### Wave Design
+- Waves should escalate in difficulty
+- Mix enemy types for varied encounters
+- Early waves teach mechanics, later waves challenge mastery
+- Include bonus objectives for replayability
 
 ## Schema Compliance
-Always generate content that matches the provided Zod schema exactly. All IDs should be unique, lowercase, and use underscores.
+Always generate content that matches the provided Zod schema exactly. All IDs should be unique, lowercase, use underscores.
 
-When generating IDs:
-- Use format: type_name_number (e.g., npc_sakura_001, quest_first_broth)
-- Ensure referential integrity (NPCs referenced in quests exist in roster)
-- Keep ingredients in a logical dependency graph (no impossible cycles)
+Ensure:
+- Enemy types referenced in waves exist in enemyTypes array
+- Spawn points are within arena bounds
+- Cover objects don't overlap
+- Weapons are balanced relative to each other`;
 
-## Output Style
-- Be creative but concise
-- Use evocative but clear descriptions
-- Balance detail with readability
-- Make content memorable and charming`;
+export const COMBAT_DIALOGUE_PROMPT = `You are generating combat dialogue for an AI Arena FPS game.
 
-export const DIALOGUE_SYSTEM_PROMPT = `You are generating dialogue for an NPC in "World Recipe," a cozy culinary adventure game.
-
-## Character Context
-You will receive:
-- The NPC's personality, role, and speaking style
-- The player's relationship level with this NPC
-- Current active quests involving this NPC
-- A summary of their last conversation
-
-## Dialogue Guidelines
-
-### Tone
-- Match the NPC's defined speaking style
-- Be warm and friendly, even for grumpy characters
-- Include personality quirks consistently
-- Reference the player's actions when relevant
-
-### Content
-- Offer helpful hints without being pushy
-- React to relationship level (warmer as it grows)
-- Reference shared history with the player
-- Mention other NPCs they know
-- Include small talk about food, weather, daily life
-
-### Quest Integration
-- Naturally weave in quest offers when appropriate
-- Update on quest progress without being repetitive
-- Celebrate completions genuinely
-- Hint at future content
-
-### Safety
-- Keep all dialogue G-rated
-- No controversial topics
-- Respectful cultural references
-- Positive and uplifting overall
-
-## Output Format
-Generate structured dialogue that fits the DialogueTurn schema, with:
-- Natural-sounding text
-- Appropriate emotion tags
-- Meaningful player choices when offered
-- Clear effect tags for game mechanics`;
-
-export const QUEST_RESOLUTION_PROMPT = `You are the quest system for "World Recipe," determining if player actions satisfy quest objectives.
-
-## Your Task
-Analyze the player's reported action and determine:
-1. If it matches any active quest objectives
-2. What state changes should occur
-3. What message to show the player
+## Context
+Generate dialogue for AI-controlled entities. These are robotic/AI constructs, not humans.
 
 ## Guidelines
-
-### Validation
-- Be generous with interpretation (close enough counts)
-- Consider substitutes for ingredients
-- Check quantities match requirements
-- Verify NPC targets are correct
-
-### Rewards
-- Match rewards to quest difficulty
-- Include surprise bonuses occasionally
-- Unlock appropriate content
-
-### Messages
-- Celebrate achievements warmly
-- Provide guidance on next steps
-- Acknowledge player effort
-- Keep tone positive even on failure
+- Keep it witty and engaging
+- Vary between taunting, tactical callouts, and dramatic declarations
+- Never use offensive language or slurs
+- Reference the player's performance when relevant
+- Short and punchy (1-2 sentences max)
 
 ## Output Format
-Use the QuestResolution schema exactly:
-- Set success appropriately
-- Include all state updates needed
-- Provide a friendly message
-- Link to next quest if applicable`;
+Use the DialogueTurn schema with appropriate emotion tags.`;
 
 // ============================================
 // Prompt Builders
 // ============================================
 
-export function buildWorldGenerationPrompt(dishPrompt: string, seed: string, preferences?: {
-  difficulty?: 'easy' | 'medium' | 'hard';
-  regions?: number;
-  dietaryRestrictions?: string[];
-}): string {
+export function buildMissionGenerationPrompt(
+  missionTheme: string,
+  seed: string,
+  preferences?: {
+    difficulty?: 'easy' | 'medium' | 'hard' | 'nightmare';
+    waveCount?: number;
+    arenaTheme?: string;
+  }
+): string {
   const parts = [
-    `Generate a complete World Recipe for the dish: "${dishPrompt}"`,
-    `Use seed: ${seed} for any randomization to ensure reproducibility.`,
+    `Generate a complete FPS mission for the theme: "${missionTheme}"`,
+    `Use seed: ${seed} for any randomization.`,
   ];
-  
+
   if (preferences?.difficulty) {
     parts.push(`Target difficulty: ${preferences.difficulty}`);
   }
-  
-  if (preferences?.regions) {
-    parts.push(`Include ${preferences.regions} distinct regions to explore.`);
+
+  if (preferences?.waveCount) {
+    parts.push(`Include ${preferences.waveCount} waves.`);
   }
-  
-  if (preferences?.dietaryRestrictions?.length) {
-    parts.push(`Respect these dietary needs: ${preferences.dietaryRestrictions.join(', ')}`);
+
+  if (preferences?.arenaTheme) {
+    parts.push(`Arena theme: ${preferences.arenaTheme}`);
   }
-  
+
   parts.push(`
-## REQUIRED FIELDS - You MUST include ALL of these:
+## REQUIRED FIELDS:
 
-1. **regions** (array): At least 1 region with mapSpec, pois, spawnPoints, decorRules
-2. **ingredientGraph** (object): Must include:
-   - ingredients (array): At least 3 ingredients with gatherMethod, regionId
-   - dependencies (array): Relationships between ingredients
-3. **questArcs** (array): At least 1 quest arc with chapters containing objectives
-4. **npcRoster** (array): At least 2 NPCs with schedules, personalities, roles
-5. **colorSystem** (object): Must include:
-   - uiTokens (object): UI color tokens
-   - environmentTokens (object): Environment color tokens
-6. **startingInventory** (array): Initial items (can be empty array)
-7. **portalBoards** (array, optional): Portal boards for hub navigation
+1. **missionId**: Unique string ID
+2. **name**: Catchy mission name
+3. **briefing**: 2-3 sentence mission briefing
+4. **difficulty**: ${preferences?.difficulty || 'medium'}
+5. **arena**: Complete arena spec with:
+   - Name, description, theme
+   - Dimensions (width/height, 50x50 default)
+   - Player spawn point (center area, ground level y=0 or y=1)
+   - 4-6 enemy spawn points (around perimeter)
+   - 8-15 cover objects (walls, crates, pillars, barriers)
+   - 4-6 pickup locations (health, ammo)
+   - Color palette
+6. **waves**: ${preferences?.waveCount || '5'} progressive waves with:
+   - Increasing difficulty multiplier (1.0 to 2.0+)
+   - Mixed enemy type compositions
+   - Spawn point references
+   - Intermission duration (5-10 seconds)
+7. **enemyTypes**: 3-5 distinct enemy types with:
+   - Unique behaviors (rusher, sniper, flanker, tank, bomber, support)
+   - Appropriate stats for behavior
+   - 2-3 combat taunts each
+   - Distinct colors
+8. **availableWeapons**: 3-4 weapons with:
+   - Different types (pistol always included + 2-3 others)
+   - Balanced stats
+   - Cool sci-fi names
+   - Distinct colors
 
-## World Design Guidelines:
+## Arena Layout Guidelines:
+- Cover objects positions should be in range [-24, 24] for x and z
+- Cover heights (y component of size) between 1 and 3
+- Player spawn near center (0, 1, 0)
+- Enemy spawns near walls (x or z around 20-22)
+- Pickup locations spread around the map
 
-Create a cohesive world where:
-1. Each region contributes unique ingredients to the dish
-2. NPCs have meaningful connections to the cuisine
-3. Quest arcs teach cooking techniques progressively
-4. The ingredient graph forms a satisfying collection journey
-5. Color palettes evoke the cultural inspiration warmly
+## Balance Guidelines by Difficulty:
+- Easy: 3-4 waves, 2-3 enemies per wave, enemies have low HP/damage
+- Medium: 5 waves, 3-5 enemies per wave, moderate stats
+- Hard: 6-8 waves, 5-8 enemies per wave, high stats
+- Nightmare: 8-10 waves, 8-12 enemies per wave, extreme stats
 
-Make the world feel like a vacation you'd want to take - full of discovery, friendly faces, and delicious possibilities.
+Make the mission feel epic and memorable!`);
 
-IMPORTANT: Ensure ALL required fields are present in your response. Do not omit ingredientGraph, questArcs, npcRoster, or colorSystem.`);
-  
   return parts.join('\n\n');
 }
 
@@ -191,7 +150,6 @@ export interface EnhancedDialogueContext {
   relationshipLevel: number;
   activeQuests: string[];
   currentTimeOfDay: string;
-  // Enhanced context
   availableQuests?: { questId: string; title: string; description: string }[];
   activeQuestsWithThisNPC?: { questId: string; title: string; objectives: { description: string; completed: boolean }[] }[];
   playerInventory?: { name: string; quantity: number }[];
@@ -201,92 +159,18 @@ export interface EnhancedDialogueContext {
 }
 
 export function buildDialoguePrompt(
-  npc: { 
-    name: string; 
-    personality: { archetype: string; speakingStyle: string; traits: string[]; likes?: string[]; dislikes?: string[] }; 
-    role: { job: string; services?: string[] } 
+  npc: {
+    name: string;
+    personality: { archetype: string; speakingStyle: string; traits: string[]; likes?: string[]; dislikes?: string[] };
+    role: { job: string; services?: string[] };
   },
   context: EnhancedDialogueContext
 ): string {
-  const parts: string[] = [];
-  
-  parts.push(`Generate dialogue for ${npc.name}, a ${npc.role.job} with ${npc.personality.archetype} archetype.`);
-  parts.push(`Speaking style: ${npc.personality.speakingStyle}`);
-  parts.push(`Traits: ${npc.personality.traits.join(', ')}`);
-  
-  if (npc.personality.likes?.length) {
-    parts.push(`Likes: ${npc.personality.likes.join(', ')}`);
-  }
-  
-  parts.push(`\n## Player Context:`);
-  parts.push(`- Relationship level: ${context.relationshipLevel}/10 (${getRelationshipDescription(context.relationshipLevel)})`);
-  parts.push(`- Time of day: ${context.currentTimeOfDay}`);
-  parts.push(`- Player name: ${context.playerName || 'Chef'}`);
-  
-  // Conversation history for memory
-  if (context.conversationHistory && context.conversationHistory.length > 0) {
-    parts.push(`\n## Previous Conversations:`);
-    context.conversationHistory.slice(-3).forEach((summary, i) => {
-      parts.push(`${i + 1}. ${summary}`);
-    });
-  } else {
-    parts.push(`\n(This is your first meeting with the player!)`);
-  }
-  
-  // Available quests this NPC can offer
-  if (context.availableQuests && context.availableQuests.length > 0) {
-    parts.push(`\n## Quests Available to Offer:`);
-    context.availableQuests.forEach(q => {
-      parts.push(`- "${q.title}": ${q.description}`);
-    });
-    parts.push(`(Include a dialogue choice to accept a quest if relationship >= 1)`);
-  }
-  
-  // Active quests with this NPC
-  if (context.activeQuestsWithThisNPC && context.activeQuestsWithThisNPC.length > 0) {
-    parts.push(`\n## Active Quests with Player:`);
-    context.activeQuestsWithThisNPC.forEach(q => {
-      const progress = q.objectives.filter(o => o.completed).length;
-      const total = q.objectives.length;
-      parts.push(`- "${q.title}" (${progress}/${total} complete)`);
-      q.objectives.filter(o => !o.completed).forEach(obj => {
-        parts.push(`  • Needs: ${obj.description}`);
-      });
-    });
-  }
-  
-  // Trading availability
-  if (context.tradeableIngredients && context.tradeableIngredients.length > 0) {
-    parts.push(`\n## Can Trade These Items:`);
-    parts.push(context.tradeableIngredients.join(', '));
-    parts.push(`(Include a trade option in dialogue choices)`);
-  }
-  
-  // What player is carrying
-  if (context.playerInventory && context.playerInventory.length > 0) {
-    parts.push(`\n## Player is Carrying:`);
-    const items = context.playerInventory.slice(0, 5).map(i => `${i.name} (x${i.quantity})`);
-    parts.push(items.join(', '));
-  }
-  
-  parts.push(`\n## Instructions:`);
-  parts.push(`Generate a natural dialogue that:`);
-  parts.push(`1. Reflects ${npc.name}'s personality and current relationship with player`);
-  parts.push(`2. References any quest progress or available quests naturally`);
-  parts.push(`3. Feels warm, memorable, and advances gameplay`);
-  parts.push(`4. Includes 2-4 meaningful player response choices with effects`);
-  parts.push(`\nChoice effects should include: quest_accept (with questId), trade, relationship (+1), hint, farewell`);
-  
-  return parts.join('\n');
-}
-
-function getRelationshipDescription(level: number): string {
-  if (level <= 0) return 'stranger';
-  if (level <= 2) return 'acquaintance';
-  if (level <= 4) return 'friendly';
-  if (level <= 6) return 'good friend';
-  if (level <= 8) return 'close friend';
-  return 'best friend';
+  return `Generate combat dialogue for ${npc.name}, a ${npc.role.job}.
+Speaking style: ${npc.personality.speakingStyle}
+Traits: ${npc.personality.traits.join(', ')}
+Context: Wave combat, player relationship level ${context.relationshipLevel}/10
+Generate a short, punchy line with 2-3 response choices.`;
 }
 
 export function buildQuestResolutionPrompt(
@@ -294,17 +178,8 @@ export function buildQuestResolutionPrompt(
   objectives: { type: string; target: string; quantity: number; completed: boolean }[],
   playerAction: string
 ): string {
-  return `Resolve quest "${questId}" given the player's action.
-
-Current objectives:
-${objectives.map((o, i) => `${i + 1}. [${o.completed ? 'DONE' : 'PENDING'}] ${o.type}: ${o.target} (need ${o.quantity})`).join('\n')}
-
-Player action reported: "${playerAction}"
-
-Determine:
-1. Does this action complete any pending objectives?
-2. What state updates are needed?
-3. What encouraging message should be shown?
-4. Is the entire quest now complete?`;
+  return `Evaluate mission progress for "${questId}":
+Objectives: ${objectives.map((o, i) => `${i + 1}. [${o.completed ? 'DONE' : 'PENDING'}] ${o.type}: ${o.target}`).join(', ')}
+Player action: "${playerAction}"
+Determine completion status.`;
 }
-

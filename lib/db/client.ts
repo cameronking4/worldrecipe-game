@@ -43,15 +43,15 @@ const safeDb = {
       findMany: async () => [],
     },
   },
-  insert: db?.insert || (() => ({
-    values: async () => ({ then: (fn: any) => fn({}) }),
-  })),
-  update: db?.update || (() => ({
-    set: async () => ({ then: (fn: any) => fn({}) }),
-  })),
-  delete: db?.delete || (() => ({
-    where: async () => ({ then: (fn: any) => fn({}) }),
-  })),
+  insert: db?.insert || ((() => ({
+    values: () => Promise.resolve({}),
+  })) as any),
+  update: db?.update || ((() => ({
+    set: () => Promise.resolve({}),
+  })) as any),
+  delete: db?.delete || ((() => ({
+    where: () => Promise.resolve({}),
+  })) as any),
 };
 
 // Export the safe database wrapper as the default db
