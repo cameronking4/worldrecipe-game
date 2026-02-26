@@ -6,8 +6,10 @@ import * as schema from './schema';
 // Database Client Setup
 // ============================================
 
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+
 let sqlite: Database.Database | null = null;
-let db: ReturnType<typeof drizzle> | null = null;
+let db: DrizzleDb | null = null;
 
 // Try to initialize SQLite database
 // Will fail gracefully in serverless environments (Vercel, etc.)
@@ -23,36 +25,34 @@ try {
   db = null;
 }
 
-// Create a safe database wrapper that handles missing database gracefully
+// Create a safe database wrapper that handles missing database gracefully.
+// Keep a typed fallback so route handlers can compile in environments where
+// SQLite is unavailable at runtime.
 const safeDb = {
   query: db?.query || {
-    worlds: {
-      findFirst: async () => null,
-      findMany: async () => [],
-    },
-    aiGenerations: {
-      findFirst: async () => null,
-      findMany: async () => [],
-    },
-    saves: {
-      findFirst: async () => null,
-      findMany: async () => [],
-    },
-    events: {
-      findFirst: async () => null,
-      findMany: async () => [],
-    },
+    worlds: { findFirst: async () => null, findMany: async () => [] },
+    aiGenerations: { findFirst: async () => null, findMany: async () => [] },
+    saves: { findFirst: async () => null, findMany: async () => [] },
+    events: { findFirst: async () => null, findMany: async () => [] },
   },
-  insert: db?.insert || (() => ({
-    values: async () => ({ then: (fn: any) => fn({}) }),
-  })),
-  update: db?.update || (() => ({
-    set: async () => ({ then: (fn: any) => fn({}) }),
-  })),
-  delete: db?.delete || (() => ({
-    where: async () => ({ then: (fn: any) => fn({}) }),
-  })),
-};
+  insert:
+    db?.insert ||
+    (() => ({
+      values: async () => [],
+    })),
+  update:
+    db?.update ||
+    (() => ({
+      set: () => ({
+        where: async () => [],
+      }),
+    })),
+  delete:
+    db?.delete ||
+    (() => ({
+      where: async () => [],
+    })),
+} as unknown as DrizzleDb;
 
 // Export the safe database wrapper as the default db
 export { safeDb as db };
@@ -77,4 +77,3 @@ export function isDatabaseConnected(): boolean {
     return false;
   }
 }
-
