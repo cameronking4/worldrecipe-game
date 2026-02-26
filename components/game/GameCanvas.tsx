@@ -25,6 +25,7 @@ import { VoxelTerrain } from './VoxelTerrain';
 import { NPCManager } from './NPCController';
 import { InteractableManager } from './Interactable';
 import { PortalBoard } from './PortalBoard';
+import { EnemyManager } from './EnemyManager';
 import { useGameStore } from '@/lib/store/gameStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
@@ -550,6 +551,13 @@ function WorldContent() {
           onNPCInteract={handleNPCInteract}
           onIngredientPickup={handleIngredientPickup}
         />
+
+        <EnemyManager
+          regionId={portalBoard.boardId}
+          mapWidth={mapWidth}
+          mapHeight={mapHeight}
+          seed={world.seed}
+        />
         
         {/* Portal interaction handler */}
         <PortalInteractionHandler onPortalInteract={handlePortalInteract} />
@@ -596,6 +604,13 @@ function WorldContent() {
         collectedItemIds={collectedItemIds}
         mapWidth={mapWidth}
         mapHeight={mapHeight}
+      />
+
+      <EnemyManager
+        regionId={region.regionId}
+        mapWidth={mapWidth}
+        mapHeight={mapHeight}
+        seed={world.seed}
       />
       
       {/* Portal interaction handler */}

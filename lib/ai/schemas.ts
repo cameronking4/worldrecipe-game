@@ -365,6 +365,12 @@ export const questResolutionSchema = z.object({
   nextQuestId: z.string().optional(),
 });
 
+export const combatDirectorBeatSchema = z.object({
+  line: z.string().describe('Short tactical line from AI director'),
+  mood: z.enum(['urgent', 'steady', 'celebratory']),
+  suggestedObjective: z.string().optional(),
+});
+
 // ============================================
 // Type Exports
 // ============================================
@@ -401,4 +407,4 @@ export type PortalBoard = z.infer<typeof portalBoardSchema>;
 export type WorldRecipe = z.infer<typeof worldRecipeSchema>;
 export type DialogueTurn = z.infer<typeof dialogueTurnSchema>;
 export type QuestResolution = z.infer<typeof questResolutionSchema>;
-
+export type CombatDirectorBeat = z.infer<typeof combatDirectorBeatSchema>;

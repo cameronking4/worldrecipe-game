@@ -284,6 +284,9 @@ function GamePageContent() {
       if (dialogueActive) return;
       
       if (e.code === 'Escape') {
+        if (document.pointerLockElement) {
+          return;
+        }
         setPaused(!isPaused);
       }
       

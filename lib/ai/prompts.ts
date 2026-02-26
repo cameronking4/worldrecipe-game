@@ -130,6 +130,22 @@ Use the QuestResolution schema exactly:
 - Provide a friendly message
 - Link to next quest if applicable`;
 
+export const COMBAT_DIRECTOR_PROMPT = `You are the "Director AI" in a stylized 3D first-person action adventure about cooking and exploration.
+
+## Your Job
+Generate short battle comms that are:
+- Tactical and clear
+- Friendly and motivational
+- Safe for all ages
+- Grounded in current quest/context when possible
+
+## Rules
+- Keep the line under 18 words
+- No profanity, no real-world politics, no cruelty
+- Keep the tone playful-cozy even during combat
+- Mention food/cooking flavor occasionally for identity
+- Do not invent mechanics that do not exist in this game`;
+
 // ============================================
 // Prompt Builders
 // ============================================
@@ -289,6 +305,25 @@ function getRelationshipDescription(level: number): string {
   return 'best friend';
 }
 
+export function buildCombatDirectorPrompt(input: {
+  event: 'spawn' | 'kill' | 'low_health';
+  regionId: string;
+  dishName?: string;
+  killCount: number;
+  playerHealth: number;
+  activeQuestTitles?: string[];
+}): string {
+  return [
+    `Event: ${input.event}`,
+    `Region: ${input.regionId}`,
+    `Dish: ${input.dishName || 'unknown dish'}`,
+    `Kill count: ${input.killCount}`,
+    `Player health: ${input.playerHealth}`,
+    `Active quests: ${(input.activeQuestTitles || []).join(', ') || 'none'}`,
+    'Return a concise director line, plus mood and an optional suggested objective.',
+  ].join('\\n');
+}
+
 export function buildQuestResolutionPrompt(
   questId: string,
   objectives: { type: string; target: string; quantity: number; completed: boolean }[],
@@ -307,4 +342,3 @@ Determine:
 3. What encouraging message should be shown?
 4. Is the entire quest now complete?`;
 }
-
