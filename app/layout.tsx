@@ -14,9 +14,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "World Recipe | Cozy Culinary Adventure",
-  description: "A cozy 3D life-sim where you travel to themed maps, befriend NPCs, gather ingredients, and cook dishes from around the world.",
-  keywords: ["game", "cooking", "cozy", "3D", "RPG", "life-sim"],
+  title: "Neon Extraction Protocol | AI FPS Arena",
+  description:
+    "A stylized 3D first-person shooter experience with AI-driven mission command powered by Vercel AI SDK.",
+  keywords: ["game", "FPS", "3D", "AI", "Next.js", "react-three-fiber"],
 };
 
 export default function RootLayout({
