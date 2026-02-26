@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 
 // ============================================
 // World Recipe - Database Schema (SQLite)
@@ -74,7 +74,9 @@ export const aiGenerations = sqliteTable('ai_generations', {
   modelUsed: text('model_used'),
   tokensUsed: integer('tokens_used'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+  inputHashIdx: index('ai_generations_input_hash_idx').on(table.inputHash),
+}));
 
 // Type exports for Drizzle
 export type World = typeof worlds.$inferSelect;

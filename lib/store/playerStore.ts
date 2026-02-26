@@ -126,9 +126,9 @@ export const usePlayerStore = create<PlayerState>()(
     setMoveDirection: (dir) => set({ moveDirection: dir }),
     
     addItem: (item, quantity = 1) => {
-      const { inventory, maxInventorySlots } = get();
+      const { inventory, maxInventorySlots, checkAndUpdateGatherObjectives } = get();
       const existingStack = inventory.find(stack => stack.item.itemId === item.itemId);
-      
+
       if (existingStack) {
         // Add to existing stack
         set({
@@ -140,11 +140,11 @@ export const usePlayerStore = create<PlayerState>()(
         });
         // Show notification
         useNotificationStore.getState().showItemCollected(item.name, quantity);
-        // Auto-check gather objectives after adding
-        setTimeout(() => get().checkAndUpdateGatherObjectives(item.itemId), 0);
+        // Check gather objectives after state update
+        checkAndUpdateGatherObjectives(item.itemId);
         return true;
       }
-      
+
       // Create new stack if we have room
       if (inventory.length < maxInventorySlots) {
         set({
@@ -152,11 +152,11 @@ export const usePlayerStore = create<PlayerState>()(
         });
         // Show notification
         useNotificationStore.getState().showItemCollected(item.name, quantity);
-        // Auto-check gather objectives after adding
-        setTimeout(() => get().checkAndUpdateGatherObjectives(item.itemId), 0);
+        // Check gather objectives after state update
+        checkAndUpdateGatherObjectives(item.itemId);
         return true;
       }
-      
+
       return false; // No room
     },
     

@@ -99,10 +99,10 @@ const initialState = {
 // Time constants (game time in seconds)
 const DAY_LENGTH_SECONDS = 24 * 60; // 24 minutes real time = 1 game day
 const TIME_PHASES: { start: number; end: number; phase: TimeOfDay }[] = [
-  { start: 0, end: 6 * 60, phase: 'morning' },    // 6:00 - 12:00
-  { start: 6 * 60, end: 12 * 60, phase: 'day' },  // 12:00 - 18:00
-  { start: 12 * 60, end: 18 * 60, phase: 'evening' }, // 18:00 - 24:00
-  { start: 18 * 60, end: 24 * 60, phase: 'night' },   // 0:00 - 6:00
+  { start: 0, end: 6 * 60, phase: 'morning' },    // 6:00 AM - 12:00 PM (0-360 seconds)
+  { start: 6 * 60, end: 12 * 60, phase: 'day' },  // 12:00 PM - 6:00 PM (360-720 seconds)
+  { start: 12 * 60, end: 18 * 60, phase: 'evening' }, // 6:00 PM - 12:00 AM (720-1080 seconds)
+  { start: 18 * 60, end: 24 * 60, phase: 'night' },   // 12:00 AM - 6:00 AM (1080-1440 seconds)
 ];
 
 function getTimeOfDay(gameTimeSeconds: number): TimeOfDay {
