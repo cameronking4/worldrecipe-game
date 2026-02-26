@@ -1,537 +1,467 @@
 'use client';
 
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, CapsuleCollider, RapierRigidBody } from '@react-three/rapier';
-import { RoundedBox, Trail, Sparkles, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useGameStore } from '@/lib/store/gameStore';
+import { useFPSStore } from '@/lib/store/fpsStore';
 
 // ============================================
-// Input Handler - Keyboard state using ref for real-time access
+// FPS Input Handler - Keyboard + Mouse
 // ============================================
-const useKeyboard = () => {
+const useFPSControls = () => {
   const keysRef = useRef({
     forward: false,
     backward: false,
     left: false,
     right: false,
-    interact: false,
+    jump: false,
     sprint: false,
+    reload: false,
   });
+
+  const shoot = useFPSStore((s) => s.shoot);
+  const reload = useFPSStore((s) => s.reload);
+  const updateLook = useFPSStore((s) => s.updateLook);
+  const isDead = useFPSStore((s) => s.isDead);
+  const damageEnemy = useFPSStore((s) => s.damageEnemy);
+  const enemies = useFPSStore((s) => s.enemies);
+  const currentWeapon = useFPSStore((s) => s.currentWeapon);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isDead) return;
+
       const code = e.code;
-      const key = e.key;
-      
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code) ||
-          ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
+
+      if (code === 'KeyW') keysRef.current.forward = true;
+      if (code === 'KeyS') keysRef.current.backward = true;
+      if (code === 'KeyA') keysRef.current.left = true;
+      if (code === 'KeyD') keysRef.current.right = true;
+      if (code === 'Space') {
         e.preventDefault();
+        keysRef.current.jump = true;
       }
-      
-      // Forward (W or ArrowUp)
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'ArrowUp' || key === 'w' || key === 'W') {
-        keysRef.current.forward = true;
-      }
-      // Backward (S or ArrowDown)
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 'ArrowDown' || key === 's' || key === 'S') {
-        keysRef.current.backward = true;
-      }
-      // Left (A or ArrowLeft)
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'ArrowLeft' || key === 'a' || key === 'A') {
-        keysRef.current.left = true;
-      }
-      // Right (D or ArrowRight)
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'ArrowRight' || key === 'd' || key === 'D') {
-        keysRef.current.right = true;
-      }
-      // Interact (E or Space)
-      if (code === 'KeyE' || code === 'Space' || key === 'e' || key === 'E' || key === ' ') {
-        keysRef.current.interact = true;
-      }
-      // Sprint (Shift)
-      if (code === 'ShiftLeft' || code === 'ShiftRight') {
-        keysRef.current.sprint = true;
+      if (code === 'ShiftLeft' || code === 'ShiftRight') keysRef.current.sprint = true;
+      if (code === 'KeyR') {
+        e.preventDefault();
+        reload();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const code = e.code;
-      const key = e.key;
-      
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'ArrowUp' || key === 'w' || key === 'W') {
-        keysRef.current.forward = false;
-      }
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 'ArrowDown' || key === 's' || key === 'S') {
-        keysRef.current.backward = false;
-      }
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'ArrowLeft' || key === 'a' || key === 'A') {
-        keysRef.current.left = false;
-      }
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'ArrowRight' || key === 'd' || key === 'D') {
-        keysRef.current.right = false;
-      }
-      if (code === 'KeyE' || code === 'Space' || key === 'e' || key === 'E' || key === ' ') {
-        keysRef.current.interact = false;
-      }
-      if (code === 'ShiftLeft' || code === 'ShiftRight') {
-        keysRef.current.sprint = false;
+
+      if (code === 'KeyW') keysRef.current.forward = false;
+      if (code === 'KeyS') keysRef.current.backward = false;
+      if (code === 'KeyA') keysRef.current.left = false;
+      if (code === 'KeyD') keysRef.current.right = false;
+      if (code === 'Space') keysRef.current.jump = false;
+      if (code === 'ShiftLeft' || code === 'ShiftRight') keysRef.current.sprint = false;
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (isDead) return;
+
+      if (e.button === 0) { // Left click
+        const didShoot = shoot();
+        if (didShoot) {
+          // Perform raycasting to detect hit
+          performShootRaycast();
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    window.addEventListener('keyup', handleKeyUp, { capture: true });
-    document.addEventListener('keydown', handleKeyDown, { capture: true });
-    document.addEventListener('keyup', handleKeyUp, { capture: true });
+    const performShootRaycast = () => {
+      // This will be called from useFrame in the actual component
+      // We'll handle raycasting in the main controller
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDead || document.pointerLockElement === null) return;
+
+      updateLook(e.movementX, e.movementY);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      window.removeEventListener('keyup', handleKeyUp, { capture: true });
-      document.removeEventListener('keydown', handleKeyDown, { capture: true });
-      document.removeEventListener('keyup', handleKeyUp, { capture: true });
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []);
+  }, [shoot, reload, updateLook, isDead]);
 
   return keysRef;
 };
 
 // ============================================
-// Enhanced Player Visual - Better character model
+// Voxel Weapon Visual
 // ============================================
-function PlayerVisual({ isMoving, isSprinting }: { isMoving: boolean; isSprinting: boolean }) {
-  const meshRef = useRef<THREE.Group>(null);
-  const bobOffset = useRef(0);
-  const armLeftRef = useRef<THREE.Group>(null);
-  const armRightRef = useRef<THREE.Group>(null);
-  const legLeftRef = useRef<THREE.Group>(null);
-  const legRightRef = useRef<THREE.Group>(null);
-  
+function VoxelWeapon() {
+  const weaponRef = useRef<THREE.Group>(null);
+  const currentWeapon = useFPSStore((s) => s.currentWeapon);
+  const isShooting = useFPSStore((s) => s.isShooting);
+  const isReloading = useFPSStore((s) => s.isReloading);
+  const muzzleFlashActive = useFPSStore((s) => s.muzzleFlashActive);
+  const currentAmmo = useFPSStore((s) => s.currentAmmo);
+
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    
-    const bobSpeed = isSprinting ? 15 : 10;
-    const bobAmount = isSprinting ? 0.08 : 0.05;
-    
-    // Bobbing animation when moving
-    if (isMoving) {
-      bobOffset.current += delta * bobSpeed;
-      meshRef.current.position.y = Math.sin(bobOffset.current) * bobAmount;
-      
-      // Arm swing
-      if (armLeftRef.current && armRightRef.current) {
-        const armSwing = Math.sin(bobOffset.current) * 0.4;
-        armLeftRef.current.rotation.x = armSwing;
-        armRightRef.current.rotation.x = -armSwing;
-      }
-      
-      // Leg swing
-      if (legLeftRef.current && legRightRef.current) {
-        const legSwing = Math.sin(bobOffset.current) * 0.3;
-        legLeftRef.current.rotation.x = -legSwing;
-        legRightRef.current.rotation.x = legSwing;
-      }
+    if (!weaponRef.current) return;
+
+    // Weapon bob animation when moving
+    const time = state.clock.elapsedTime;
+    weaponRef.current.position.y = -0.3 + Math.sin(time * 4) * 0.02;
+    weaponRef.current.position.x = 0.3 + Math.cos(time * 4) * 0.01;
+
+    // Recoil animation
+    if (isShooting) {
+      weaponRef.current.position.z += 0.1;
+      weaponRef.current.rotation.x += currentWeapon.recoil;
     } else {
-      meshRef.current.position.y = THREE.MathUtils.lerp(
-        meshRef.current.position.y,
-        0,
-        delta * 5
-      );
-      
-      // Idle breathing animation
-      const breathe = Math.sin(state.clock.elapsedTime * 2) * 0.02;
-      meshRef.current.scale.y = 1 + breathe;
-      
-      // Reset arm/leg positions
-      if (armLeftRef.current) armLeftRef.current.rotation.x = THREE.MathUtils.lerp(armLeftRef.current.rotation.x, 0, delta * 5);
-      if (armRightRef.current) armRightRef.current.rotation.x = THREE.MathUtils.lerp(armRightRef.current.rotation.x, 0, delta * 5);
-      if (legLeftRef.current) legLeftRef.current.rotation.x = THREE.MathUtils.lerp(legLeftRef.current.rotation.x, 0, delta * 5);
-      if (legRightRef.current) legRightRef.current.rotation.x = THREE.MathUtils.lerp(legRightRef.current.rotation.x, 0, delta * 5);
+      // Smooth return to original position
+      weaponRef.current.position.z = THREE.MathUtils.lerp(weaponRef.current.position.z, 0.5, delta * 10);
+      weaponRef.current.rotation.x = THREE.MathUtils.lerp(weaponRef.current.rotation.x, 0, delta * 10);
+    }
+
+    // Reload animation
+    if (isReloading) {
+      const reloadAnim = Math.sin(time * 5);
+      weaponRef.current.rotation.z = reloadAnim * 0.5;
+      weaponRef.current.position.y = -0.5 + Math.abs(reloadAnim) * 0.2;
+    } else {
+      weaponRef.current.rotation.z = THREE.MathUtils.lerp(weaponRef.current.rotation.z, 0, delta * 10);
     }
   });
-  
+
+  // Different weapon models based on type
+  const getWeaponModel = () => {
+    switch (currentWeapon.type) {
+      case 'pistol':
+        return (
+          <>
+            {/* Grip */}
+            <mesh position={[0, -0.15, 0]} castShadow>
+              <boxGeometry args={[0.08, 0.25, 0.12]} />
+              <meshStandardMaterial color="#2C2C2C" roughness={0.8} metalness={0.5} />
+            </mesh>
+            {/* Slide */}
+            <mesh position={[0, 0.05, 0]} castShadow>
+              <boxGeometry args={[0.08, 0.1, 0.3]} />
+              <meshStandardMaterial color="#3A3A3A" roughness={0.6} metalness={0.7} />
+            </mesh>
+            {/* Barrel */}
+            <mesh position={[0, 0.05, -0.2]} castShadow>
+              <boxGeometry args={[0.05, 0.05, 0.1]} />
+              <meshStandardMaterial color="#1A1A1A" roughness={0.4} metalness={0.9} />
+            </mesh>
+          </>
+        );
+      case 'rifle':
+        return (
+          <>
+            {/* Stock */}
+            <mesh position={[0, -0.05, 0.3]} castShadow>
+              <boxGeometry args={[0.1, 0.15, 0.3]} />
+              <meshStandardMaterial color="#8B4513" roughness={0.9} />
+            </mesh>
+            {/* Body */}
+            <mesh position={[0, 0, 0]} castShadow>
+              <boxGeometry args={[0.12, 0.12, 0.6]} />
+              <meshStandardMaterial color="#2C2C2C" roughness={0.7} metalness={0.6} />
+            </mesh>
+            {/* Barrel */}
+            <mesh position={[0, 0.02, -0.4]} castShadow>
+              <boxGeometry args={[0.06, 0.06, 0.3]} />
+              <meshStandardMaterial color="#1A1A1A" roughness={0.4} metalness={0.9} />
+            </mesh>
+            {/* Magazine */}
+            <mesh position={[0, -0.1, -0.1]} castShadow>
+              <boxGeometry args={[0.08, 0.15, 0.12]} />
+              <meshStandardMaterial color="#3A3A3A" roughness={0.8} />
+            </mesh>
+          </>
+        );
+      case 'shotgun':
+        return (
+          <>
+            {/* Stock */}
+            <mesh position={[0, -0.05, 0.35]} castShadow>
+              <boxGeometry args={[0.12, 0.18, 0.35]} />
+              <meshStandardMaterial color="#8B4513" roughness={0.9} />
+            </mesh>
+            {/* Body */}
+            <mesh position={[0, 0, 0]} castShadow>
+              <boxGeometry args={[0.14, 0.14, 0.5]} />
+              <meshStandardMaterial color="#2C2C2C" roughness={0.8} metalness={0.5} />
+            </mesh>
+            {/* Barrel (wider) */}
+            <mesh position={[0, 0.03, -0.45]} castShadow>
+              <boxGeometry args={[0.1, 0.1, 0.4]} />
+              <meshStandardMaterial color="#1A1A1A" roughness={0.4} metalness={0.9} />
+            </mesh>
+            {/* Pump */}
+            <mesh position={[0, -0.05, -0.15]} castShadow>
+              <boxGeometry args={[0.12, 0.08, 0.15]} />
+              <meshStandardMaterial color="#654321" roughness={0.9} />
+            </mesh>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <group ref={meshRef}>
-      {/* Body */}
-      <RoundedBox
-        args={[0.55, 0.75, 0.45]}
-        radius={0.12}
-        smoothness={4}
-        position={[0, 0.4, 0]}
-        castShadow
-      >
-        <meshStandardMaterial 
-          color="#FF6B6B" 
-          roughness={0.6}
-          metalness={0.1}
-        />
-      </RoundedBox>
-      
-      {/* Apron detail */}
-      <RoundedBox
-        args={[0.5, 0.5, 0.1]}
-        radius={0.05}
-        smoothness={4}
-        position={[0, 0.35, 0.22]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFFFFF" roughness={0.7} />
-      </RoundedBox>
-      
-      {/* Head */}
-      <RoundedBox
-        args={[0.45, 0.45, 0.4]}
-        radius={0.1}
-        smoothness={4}
-        position={[0, 0.98, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-      </RoundedBox>
-      
-      {/* Eyes */}
-      <mesh position={[-0.12, 1.02, 0.18]} castShadow>
-        <boxGeometry args={[0.1, 0.1, 0.06]} />
-        <meshStandardMaterial color="#2D2D2D" />
-      </mesh>
-      <mesh position={[0.12, 1.02, 0.18]} castShadow>
-        <boxGeometry args={[0.1, 0.1, 0.06]} />
-        <meshStandardMaterial color="#2D2D2D" />
-      </mesh>
-      
-      {/* Eye highlights */}
-      <mesh position={[-0.1, 1.04, 0.2]}>
-        <boxGeometry args={[0.03, 0.03, 0.02]} />
-        <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.3} />
-      </mesh>
-      <mesh position={[0.14, 1.04, 0.2]}>
-        <boxGeometry args={[0.03, 0.03, 0.02]} />
-        <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.3} />
-      </mesh>
-      
-      {/* Rosy cheeks */}
-      <mesh position={[-0.18, 0.95, 0.15]}>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#FFB6C1" transparent opacity={0.6} />
-      </mesh>
-      <mesh position={[0.18, 0.95, 0.15]}>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#FFB6C1" transparent opacity={0.6} />
-      </mesh>
-      
-      {/* Smile */}
-      <mesh position={[0, 0.9, 0.19]}>
-        <boxGeometry args={[0.12, 0.03, 0.02]} />
-        <meshStandardMaterial color="#C67B5C" />
-      </mesh>
-      
-      {/* Chef's Hat (toque) */}
-      <RoundedBox
-        args={[0.4, 0.35, 0.35]}
-        radius={0.06}
-        smoothness={4}
-        position={[0, 1.35, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
-      </RoundedBox>
-      <mesh position={[0, 1.58, 0]} castShadow>
-        <cylinderGeometry args={[0.18, 0.2, 0.2, 8]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
-      </mesh>
-      {/* Hat band */}
-      <mesh position={[0, 1.2, 0]}>
-        <cylinderGeometry args={[0.22, 0.22, 0.05, 8]} />
-        <meshStandardMaterial color="#FFD700" roughness={0.3} metalness={0.5} />
-      </mesh>
-      
-      {/* Arms */}
-      <group ref={armLeftRef} position={[-0.38, 0.45, 0]}>
-        <RoundedBox
-          args={[0.18, 0.45, 0.18]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-        </RoundedBox>
-      </group>
-      <group ref={armRightRef} position={[0.38, 0.45, 0]}>
-        <RoundedBox
-          args={[0.18, 0.45, 0.18]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-        </RoundedBox>
-      </group>
-      
-      {/* Legs */}
-      <group ref={legLeftRef} position={[-0.14, 0, 0]}>
-        <RoundedBox
-          args={[0.2, 0.3, 0.2]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#4A4A4A" roughness={0.7} />
-        </RoundedBox>
-        {/* Shoe */}
-        <mesh position={[0, -0.25, 0.05]} castShadow>
-          <boxGeometry args={[0.2, 0.1, 0.25]} />
-          <meshStandardMaterial color="#8B4513" roughness={0.8} />
-        </mesh>
-      </group>
-      <group ref={legRightRef} position={[0.14, 0, 0]}>
-        <RoundedBox
-          args={[0.2, 0.3, 0.2]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#4A4A4A" roughness={0.7} />
-        </RoundedBox>
-        {/* Shoe */}
-        <mesh position={[0, -0.25, 0.05]} castShadow>
-          <boxGeometry args={[0.2, 0.1, 0.25]} />
-          <meshStandardMaterial color="#8B4513" roughness={0.8} />
-        </mesh>
-      </group>
-      
-      {/* Movement particles when sprinting */}
-      {isSprinting && (
-        <Sparkles 
-          count={15}
-          scale={[1, 0.5, 1]}
-          size={1.5}
-          speed={2}
-          opacity={0.6}
-          color="#FFD700"
-          position={[0, 0.2, -0.3]}
+    <group ref={weaponRef} position={[0.3, -0.3, 0.5]}>
+      {getWeaponModel()}
+
+      {/* Muzzle flash */}
+      {muzzleFlashActive && (
+        <pointLight
+          position={[0, 0.05, -0.5]}
+          color="#FFA500"
+          intensity={5}
+          distance={5}
         />
       )}
-      
-      {/* Ambient sparkles around player - always visible */}
-      <Sparkles 
-        count={8}
-        scale={[1.5, 2, 1.5]}
-        size={0.8}
-        speed={0.3}
-        opacity={0.4}
-        color="#FFFFFF"
-        position={[0, 1, 0]}
-      />
-      
-      {/* Player halo/glow ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <ringGeometry args={[0.5, 0.6, 16]} />
-        <meshBasicMaterial 
-          color="#FFD700" 
-          transparent 
-          opacity={0.3}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+
+      {/* Ammo indicator on weapon */}
+      {currentAmmo === 0 && !isReloading && (
+        <mesh position={[0, 0.2, 0]}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshStandardMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={0.5} />
+        </mesh>
+      )}
     </group>
   );
 }
 
 // ============================================
-// Camera Follow Logic - MUCH CLOSER & SMOOTHER
+// First-Person Camera
 // ============================================
-function useCameraFollow(targetPosition: THREE.Vector3, isMoving: boolean) {
+function FPSCamera({ targetPosition }: { targetPosition: THREE.Vector3 }) {
   const { camera } = useThree();
-  
-  // MUCH CLOSER camera offset for immersive feel
-  const baseOffset = useMemo(() => new THREE.Vector3(4, 5, 4), []);
-  const cameraOffset = useRef(baseOffset.clone());
-  const smoothPosition = useRef(new THREE.Vector3());
-  const lookAtTarget = useRef(new THREE.Vector3());
-  const shakeOffset = useRef(new THREE.Vector3());
-  
-  useEffect(() => {
-    // Initialize camera position
-    smoothPosition.current.copy(targetPosition).add(baseOffset);
-    camera.position.copy(smoothPosition.current);
-  }, [camera, targetPosition, baseOffset]);
-  
-  useFrame((state, delta) => {
-    // Clamp delta to prevent huge jumps
-    const clampedDelta = Math.min(delta, 0.1);
-    
-    // Dynamic camera offset - slightly closer when moving
-    const dynamicOffset = baseOffset.clone();
-    if (isMoving) {
-      dynamicOffset.multiplyScalar(0.95);
-    }
-    
-    // Subtle camera shake when moving
-    if (isMoving) {
-      shakeOffset.current.set(
-        Math.sin(state.clock.elapsedTime * 15) * 0.02,
-        Math.sin(state.clock.elapsedTime * 20) * 0.01,
-        Math.cos(state.clock.elapsedTime * 15) * 0.02
-      );
-    } else {
-      shakeOffset.current.lerp(new THREE.Vector3(), clampedDelta * 5);
-    }
-    
-    // Target camera position
-    const targetCamPos = targetPosition.clone()
-      .add(dynamicOffset)
-      .add(shakeOffset.current);
-    
-    // Very smooth camera movement
-    smoothPosition.current.lerp(targetCamPos, clampedDelta * 4);
-    camera.position.copy(smoothPosition.current);
-    
-    // Smooth look-at with slight lead
-    const lookAhead = isMoving ? 0.5 : 0;
-    const targetLookAt = targetPosition.clone();
-    targetLookAt.y += 0.8; // Look at character's head level
-    
-    lookAtTarget.current.lerp(targetLookAt, clampedDelta * 6);
-    camera.lookAt(lookAtTarget.current);
+  const pitch = useFPSStore((s) => s.pitch);
+  const yaw = useFPSStore((s) => s.yaw);
+
+  useFrame(() => {
+    // Position camera at eye level
+    const eyeHeight = 1.6;
+    camera.position.set(
+      targetPosition.x,
+      targetPosition.y + eyeHeight,
+      targetPosition.z
+    );
+
+    // Apply pitch and yaw rotation
+    camera.rotation.order = 'YXZ';
+    camera.rotation.x = pitch;
+    camera.rotation.y = yaw;
   });
+
+  return null;
 }
 
 // ============================================
-// Main Player Controller
+// Shooting Raycast System
+// ============================================
+function ShootingSystem() {
+  const { camera, scene } = useThree();
+  const isShooting = useFPSStore((s) => s.isShooting);
+  const currentWeapon = useFPSStore((s) => s.currentWeapon);
+  const damageEnemy = useFPSStore((s) => s.damageEnemy);
+  const enemies = useFPSStore((s) => s.enemies);
+  const lastShotTime = useRef(0);
+
+  useFrame(() => {
+    if (!isShooting) return;
+
+    const now = Date.now();
+    if (now - lastShotTime.current < 50) return; // Prevent duplicate shots
+    lastShotTime.current = now;
+
+    // Create raycaster from camera center
+    const raycaster = new THREE.Raycaster();
+    const center = new THREE.Vector2(0, 0); // Screen center
+    raycaster.setFromCamera(center, camera);
+
+    // Check intersection with all scene objects
+    const intersects = raycaster.intersectObjects(scene.children, true);
+
+    if (intersects.length > 0) {
+      // Find if we hit an enemy
+      for (const intersect of intersects) {
+        // Check if this object belongs to an enemy
+        let object = intersect.object;
+        while (object.parent) {
+          // Check if object name or userData contains enemy id
+          const enemyId = object.userData?.enemyId;
+          if (enemyId) {
+            // Calculate damage with distance falloff
+            const distance = intersect.distance;
+            let damage = currentWeapon.damage;
+
+            if (distance > currentWeapon.range) {
+              continue; // Out of range
+            }
+
+            // Distance falloff
+            const falloff = 1 - (distance / currentWeapon.range) * 0.5;
+            damage *= falloff;
+
+            // Shotgun fires multiple pellets
+            if (currentWeapon.type === 'shotgun') {
+              damage *= 8; // 8 pellets
+            }
+
+            damageEnemy(enemyId, Math.floor(damage));
+            return; // Only hit one enemy per shot
+          }
+          object = object.parent;
+        }
+      }
+    }
+  });
+
+  return null;
+}
+
+// ============================================
+// Main FPS Player Controller
 // ============================================
 export function PlayerController() {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
-  const playerGroupRef = useRef<THREE.Group>(null);
-  const keysRef = useKeyboard();
-  
+  const keysRef = useFPSControls();
+
   const setPosition = usePlayerStore((s) => s.setPosition);
-  const setRotation = usePlayerStore((s) => s.setRotation);
   const setMoving = usePlayerStore((s) => s.setMoving);
-  const isMoving = usePlayerStore((s) => s.isMoving);
   const isPaused = useGameStore((s) => s.isPaused);
-  const dialogueActive = useGameStore((s) => s.dialogueState.active);
-  const advanceTime = useGameStore((s) => s.advanceTime);
-  
-  // Movement settings - INCREASED for better feel
-  const baseMoveSpeed = 6;
+  const yaw = useFPSStore((s) => s.yaw);
+  const isDead = useFPSStore((s) => s.isDead);
+
+  // Movement settings
+  const baseMoveSpeed = 8;
   const sprintMultiplier = 1.6;
-  const rotationSpeed = 10;
-  
-  // Current position for camera follow
-  const currentPosition = useRef(new THREE.Vector3(0, 0.5, 0));
-  const isSprinting = useRef(false);
-  
-  // Camera follow
-  useCameraFollow(currentPosition.current, isMoving);
-  
+  const jumpForce = 8;
+
+  const currentPosition = useRef(new THREE.Vector3(0, 1, 0));
+  const isGrounded = useRef(false);
+
+  // Request pointer lock on mount
+  useEffect(() => {
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      canvas.addEventListener('click', () => {
+        canvas.requestPointerLock();
+      });
+    }
+  }, []);
+
   useFrame((_, delta) => {
-    if (!rigidBodyRef.current) return;
-    
-    if (!Number.isFinite(delta) || delta <= 0 || delta > 0.1) {
-      delta = 0.016;
-    }
-    
-    const canMove = !isPaused && !dialogueActive;
-    
-    if (!isPaused) {
-      advanceTime(delta);
-    }
-    
+    if (!rigidBodyRef.current || isPaused || isDead) return;
+
     const keys = keysRef.current;
-    isSprinting.current = keys.sprint && canMove;
-    
+    const isSprinting = keys.sprint;
+
+    // Calculate movement direction based on camera yaw
     let moveX = 0;
     let moveZ = 0;
-    
-    if (canMove) {
-      if (keys.forward) moveZ -= 1;
-      if (keys.backward) moveZ += 1;
-      if (keys.left) moveX -= 1;
-      if (keys.right) moveX += 1;
-    }
-    
+
+    if (keys.forward) moveZ -= 1;
+    if (keys.backward) moveZ += 1;
+    if (keys.left) moveX -= 1;
+    if (keys.right) moveX += 1;
+
     // Normalize diagonal movement
     const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
     if (length > 0) {
       moveX /= length;
       moveZ /= length;
     }
-    
-    // Calculate speed
-    const currentSpeed = baseMoveSpeed * (isSprinting.current ? sprintMultiplier : 1);
-    
+
+    // Rotate movement direction based on camera yaw
+    const rotatedX = moveX * Math.cos(yaw) - moveZ * Math.sin(yaw);
+    const rotatedZ = moveX * Math.sin(yaw) + moveZ * Math.cos(yaw);
+
+    // Apply movement speed
+    const currentSpeed = baseMoveSpeed * (isSprinting ? sprintMultiplier : 1);
+
     try {
       const currentVel = rigidBodyRef.current.linvel();
-      if (currentVel && Number.isFinite(currentVel.y)) {
+
+      // Apply movement
+      rigidBodyRef.current.setLinvel(
+        {
+          x: rotatedX * currentSpeed,
+          y: currentVel.y, // Preserve vertical velocity
+          z: rotatedZ * currentSpeed,
+        },
+        true
+      );
+
+      // Jump
+      if (keys.jump && isGrounded.current) {
         rigidBodyRef.current.setLinvel(
           {
-            x: moveX * currentSpeed,
-            y: currentVel.y,
-            z: moveZ * currentSpeed,
+            x: currentVel.x,
+            y: jumpForce,
+            z: currentVel.z,
           },
           true
         );
+        isGrounded.current = false;
       }
-      
+
+      // Update position
       const position = rigidBodyRef.current.translation();
-      if (position && Number.isFinite(position.x) && Number.isFinite(position.y) && Number.isFinite(position.z)) {
+      if (position && Number.isFinite(position.x)) {
         currentPosition.current.set(position.x, position.y, position.z);
         setPosition([position.x, position.y, position.z]);
       }
+
+      // Check if grounded (simple check)
+      if (Math.abs(currentVel.y) < 0.1) {
+        isGrounded.current = true;
+      }
+
+      // Update moving state
+      const moving = length > 0;
+      setMoving(moving);
+
     } catch (e) {
       console.debug('Physics not ready:', e);
-      return;
-    }
-    
-    // Update moving state
-    const moving = length > 0;
-    if (moving !== isMoving) {
-      setMoving(moving);
-    }
-    
-    // Rotate player to face movement direction
-    if (length > 0 && playerGroupRef.current) {
-      const targetRotation = Math.atan2(moveX, moveZ);
-      const currentRotation = playerGroupRef.current.rotation.y;
-      
-      let rotationDiff = targetRotation - currentRotation;
-      
-      while (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
-      while (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
-      
-      playerGroupRef.current.rotation.y += rotationDiff * delta * rotationSpeed;
-      setRotation(playerGroupRef.current.rotation.y);
     }
   });
-  
+
   return (
-    <RigidBody
-      ref={rigidBodyRef}
-      position={[0, 1, 0]}
-      enabledRotations={[false, false, false]}
-      linearDamping={6}
-      angularDamping={6}
-      colliders={false}
-      mass={1}
-    >
-      <CapsuleCollider args={[0.35, 0.3]} position={[0, 0.65, 0]} />
-      <group ref={playerGroupRef}>
-        <PlayerVisual isMoving={isMoving} isSprinting={isSprinting.current} />
-        
-        {/* Player indicator light */}
-        <pointLight 
-          position={[0, 1.8, 0]} 
-          color="#FFD700" 
-          intensity={0.3} 
-          distance={3}
-        />
-      </group>
-    </RigidBody>
+    <>
+      <FPSCamera targetPosition={currentPosition.current} />
+      <ShootingSystem />
+
+      <RigidBody
+        ref={rigidBodyRef}
+        position={[0, 2, 0]}
+        enabledRotations={[false, false, false]}
+        linearDamping={8}
+        colliders={false}
+        mass={1}
+      >
+        <CapsuleCollider args={[0.5, 0.5]} />
+
+        {/* Invisible player body (we don't see it in first person) */}
+        {/* But we keep it for physics collisions */}
+      </RigidBody>
+
+      {/* Weapon visible in first-person view */}
+      {!isDead && <VoxelWeapon />}
+    </>
   );
 }
 

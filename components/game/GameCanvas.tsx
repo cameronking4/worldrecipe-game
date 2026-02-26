@@ -25,6 +25,7 @@ import { VoxelTerrain } from './VoxelTerrain';
 import { NPCManager } from './NPCController';
 import { InteractableManager } from './Interactable';
 import { PortalBoard } from './PortalBoard';
+import { EnemyManager } from './EnemyController';
 import { useGameStore } from '@/lib/store/gameStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
@@ -579,15 +580,11 @@ function WorldContent() {
       
       {/* Terrain decorations */}
       <VoxelTerrain region={region} seed={world.seed} />
-      
-      {/* NPCs */}
-      <NPCManager
-        npcs={world.npcRoster}
-        pois={allPois}
-        onNPCInteract={handleNPCInteract}
-      />
-      
-      {/* Interactables */}
+
+      {/* FPS Enemies instead of NPCs */}
+      <EnemyManager />
+
+      {/* Keep some interactables as ammo/health pickups */}
       <InteractableManager
         ingredients={world.ingredientGraph.ingredients}
         regionId={region.regionId}
@@ -812,7 +809,8 @@ export function GameCanvas() {
         camera={{
           near: 0.1,
           far: 200,
-          fov: 50,
+          fov: 75, // Wider FOV for FPS
+          position: [0, 1.6, 0], // Eye level
         }}
         onCreated={(state) => {
           state.gl.setClearColor(skyColor);
