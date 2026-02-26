@@ -1,226 +1,215 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// ============================================
-// Animated Background
-// ============================================
-function AnimatedBackground() {
-  return (
-    <div className="fixed inset-0 -z-10 overflow-hidden">
-      {/* Gradient base */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#0f3460]" />
-      
-      {/* Floating elements */}
-      <div className="absolute inset-0">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full opacity-20"
-            style={{
-              width: `${20 + Math.random() * 40}px`,
-              height: `${20 + Math.random() * 40}px`,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              background: `linear-gradient(135deg, ${
-                ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'][Math.floor(Math.random() * 5)]
-              }, transparent)`,
-              animation: `float ${5 + Math.random() * 10}s ease-in-out infinite`,
-              animationDelay: `${Math.random() * 5}s`,
-            }}
-          />
-        ))}
-      </div>
-      
-      {/* Vignette overlay */}
-      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/50" />
-    </div>
-  );
+type Difficulty = 'rookie' | 'veteran' | 'nightmare';
+type RadioMood = 'calm' | 'alert' | 'urgent' | 'critical' | 'victory';
+
+interface RadioResponse {
+  line: string;
+  objective: string;
+  mood: RadioMood;
 }
 
-// ============================================
-// Logo Component
-// ============================================
-function Logo() {
-  return (
-    <div className="text-center mb-8 animate-in fade-in slide-in-from-top duration-700">
-      <div className="inline-block mb-4">
-        <span className="text-6xl">🍳</span>
-      </div>
-      <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight">
-        <span className="bg-gradient-to-r from-[#FF6B6B] via-[#FFE66D] to-[#4ECDC4] bg-clip-text text-transparent">
-          World Recipe
-        </span>
-      </h1>
-      <p className="text-xl text-muted-foreground mt-3 font-medium">
-        A Cozy Culinary Adventure
-      </p>
-    </div>
-  );
+const DIFFICULTY_COPY: Record<Difficulty, { label: string; tempo: string; note: string; accent: string }> = {
+  rookie: {
+    label: 'Rookie',
+    tempo: 'Low pressure',
+    note: 'Longer timer, stronger armor, lower enemy damage.',
+    accent: 'from-emerald-300/35 to-cyan-300/25',
+  },
+  veteran: {
+    label: 'Veteran',
+    tempo: 'Balanced tempo',
+    note: 'Default FPS pacing with moderate enemy aggression.',
+    accent: 'from-cyan-300/35 to-blue-300/25',
+  },
+  nightmare: {
+    label: 'Nightmare',
+    tempo: 'High pressure',
+    note: 'More waves, tougher hostiles, tighter mission clock.',
+    accent: 'from-orange-300/35 to-red-300/25',
+  },
+};
+
+function sanitizeCallsign(raw: string) {
+  const cleaned = raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 16);
+
+  return cleaned || 'RAVEN-7';
 }
 
-// ============================================
-// Feature Card
-// ============================================
-function FeatureCard({ emoji, title, description }: { emoji: string; title: string; description: string }) {
-  return (
-    <Card className="bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-300 hover:scale-105">
-      <CardContent className="p-4 text-center">
-        <span className="text-3xl block mb-2">{emoji}</span>
-        <h3 className="font-semibold text-foreground">{title}</h3>
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ============================================
-// Dish Preview Card
-// ============================================
-function DishPreviewCard({ 
-  name, 
-  origin, 
-  difficulty, 
-  emoji,
-  selected,
-  onClick 
-}: { 
-  name: string; 
-  origin: string; 
-  difficulty: 'easy' | 'medium' | 'hard';
-  emoji: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const difficultyColors = {
-    easy: 'bg-green-500/20 text-green-400',
-    medium: 'bg-yellow-500/20 text-yellow-400',
-    hard: 'bg-red-500/20 text-red-400',
-  };
-  
-  return (
-    <Card 
-      className={`cursor-pointer transition-all duration-300 hover:scale-105 ${
-        selected 
-          ? 'ring-2 ring-primary bg-card/90 border-primary' 
-          : 'bg-card/60 backdrop-blur-sm border-border/50 hover:border-primary/50'
-      }`}
-      onClick={onClick}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-4xl">{emoji}</span>
-          <div className="flex-1">
-            <h3 className="font-semibold text-foreground">{name}</h3>
-            <p className="text-xs text-muted-foreground">{origin}</p>
-          </div>
-          <Badge className={difficultyColors[difficulty]} variant="secondary">
-            {difficulty}
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ============================================
-// Main Menu
-// ============================================
-export default function MainMenu() {
+export default function HomePage() {
   const router = useRouter();
-  const [selectedDish, setSelectedDish] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const featuredDishes = [
-    { id: 'ramen', name: 'Tonkotsu Ramen', origin: 'Japan', difficulty: 'medium' as const, emoji: '🍜' },
-    { id: 'tagine', name: 'Lamb Tagine', origin: 'Morocco', difficulty: 'hard' as const, emoji: '🍲' },
-    { id: 'tacos', name: 'Street Tacos', origin: 'Mexico', difficulty: 'easy' as const, emoji: '🌮' },
-    { id: 'pho', name: 'Beef Pho', origin: 'Vietnam', difficulty: 'medium' as const, emoji: '🥢' },
-  ];
-  
-  const handleStartGame = () => {
-    setIsLoading(true);
-    // Pass the selected dish to the game page
-    const dishName = featuredDishes.find(d => d.id === selectedDish)?.name || 'Simple Ramen';
-    const difficulty = featuredDishes.find(d => d.id === selectedDish)?.difficulty || 'medium';
-    router.push(`/game?dish=${encodeURIComponent(dishName)}&difficulty=${difficulty}`);
+
+  const [callsign, setCallsign] = useState('RAVEN-7');
+  const [difficulty, setDifficulty] = useState<Difficulty>('veteran');
+  const [briefing, setBriefing] = useState('Syncing COMMAND-9 uplink...');
+  const [objective, setObjective] = useState('Acquire mission packet.');
+  const [loadingBriefing, setLoadingBriefing] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+
+  const difficultyMeta = useMemo(() => DIFFICULTY_COPY[difficulty], [difficulty]);
+
+  const loadBriefing = useCallback(async () => {
+    setLoadingBriefing(true);
+
+    try {
+      const response = await fetch('/api/ai/fps/radio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trigger: 'welcome',
+          callsign: sanitizeCallsign(callsign),
+          difficulty,
+          stats: {
+            wave: 1,
+            kills: 0,
+            health: 100,
+            armor: difficulty === 'rookie' ? 70 : difficulty === 'veteran' ? 55 : 45,
+            ammo: 30,
+            reserveAmmo: difficulty === 'rookie' ? 180 : difficulty === 'veteran' ? 150 : 130,
+            enemiesRemaining: difficulty === 'rookie' ? 4 : difficulty === 'veteran' ? 5 : 6,
+            timeLeft: difficulty === 'rookie' ? 360 : difficulty === 'veteran' ? 300 : 240,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Status ${response.status}`);
+      }
+
+      const data = (await response.json()) as RadioResponse;
+      setBriefing(data.line || 'COMMAND-9 standing by.');
+      setObjective(data.objective || 'Deploy and secure the arena.');
+    } catch (error) {
+      console.error('Failed to load briefing:', error);
+      setBriefing('COMMAND-9 link unstable. Fall back to autonomous combat protocol.');
+      setObjective('Deploy and clear active hostiles in every wave.');
+    } finally {
+      setLoadingBriefing(false);
+    }
+  }, [callsign, difficulty]);
+
+  useEffect(() => {
+    void loadBriefing();
+  }, [loadBriefing]);
+
+  const handleDeploy = () => {
+    setDeploying(true);
+    router.push(`/game?callsign=${encodeURIComponent(sanitizeCallsign(callsign))}&difficulty=${difficulty}`);
   };
-  
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 relative">
-      <AnimatedBackground />
-      
-      <div className="max-w-4xl w-full space-y-8">
-        <Logo />
-        
-        {/* Feature highlights */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom duration-700 delay-200">
-          <FeatureCard emoji="🗺️" title="Explore" description="Visit themed regions" />
-          <FeatureCard emoji="👥" title="Befriend" description="Meet unique NPCs" />
-          <FeatureCard emoji="🥬" title="Gather" description="Collect ingredients" />
-          <FeatureCard emoji="🍳" title="Cook" description="Master recipes" />
-        </div>
-        
-        {/* Dish selection */}
-        <Card className="bg-card/80 backdrop-blur-sm border-border/50 animate-in fade-in slide-in-from-bottom duration-700 delay-300">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Choose Your Adventure</CardTitle>
-            <CardDescription>Select a dish to begin your culinary journey</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {featuredDishes.map((dish) => (
-                <DishPreviewCard
-                  key={dish.id}
-                  {...dish}
-                  selected={selectedDish === dish.id}
-                  onClick={() => setSelectedDish(dish.id)}
+    <main className="relative min-h-screen overflow-hidden bg-[#04090f] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.2),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(251,191,36,0.14),transparent_30%),linear-gradient(140deg,#04090f_0%,#061622_45%,#08111b_100%)]" />
+      <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(34,211,238,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.08)_1px,transparent_1px)] [background-size:40px_40px]" />
+
+      <section className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-6 px-4 py-12 md:px-8">
+        <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <Card className="border-cyan-300/35 bg-[#07131d]/90 backdrop-blur">
+            <CardHeader className="space-y-3">
+              <p className="font-mono text-xs uppercase tracking-[0.32em] text-cyan-300">New FPS Mission</p>
+              <CardTitle className="text-4xl leading-tight md:text-5xl">Neon Extraction Protocol</CardTitle>
+              <p className="max-w-xl text-sm text-cyan-100/85">
+                Full first-person combat redesign: 3D arena movement, wave survival combat loop, and live AI mission radio powered by Vercel AI SDK + AI Gateway.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {(['rookie', 'veteran', 'nightmare'] as Difficulty[]).map((mode) => {
+                  const meta = DIFFICULTY_COPY[mode];
+                  const selected = difficulty === mode;
+
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setDifficulty(mode)}
+                      className={`rounded-lg border px-3 py-3 text-left transition ${
+                        selected
+                          ? 'border-cyan-200 bg-cyan-950/45 shadow-[0_0_24px_rgba(34,211,238,0.25)]'
+                          : 'border-cyan-300/20 bg-slate-900/45 hover:border-cyan-300/45'
+                      }`}
+                    >
+                      <p className="font-semibold text-cyan-100">{meta.label}</p>
+                      <p className="text-xs text-cyan-100/70">{meta.tempo}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-xl border border-cyan-300/25 bg-black/20 p-4">
+                <label htmlFor="callsign" className="mb-2 block font-mono text-xs uppercase tracking-[0.2em] text-cyan-300">
+                  Operator Callsign
+                </label>
+                <input
+                  id="callsign"
+                  value={callsign}
+                  onChange={(event) => setCallsign(sanitizeCallsign(event.target.value))}
+                  className="h-11 w-full rounded border border-cyan-300/30 bg-black/30 px-3 font-mono text-sm text-cyan-50 outline-none focus:border-cyan-200"
                 />
-              ))}
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                size="lg"
-                className="flex-1 h-14 text-lg font-semibold"
-                disabled={!selectedDish || isLoading}
-                onClick={handleStartGame}
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Generating World...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    🚀 Start New Adventure
-                  </span>
-                )}
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-14"
-                onClick={() => router.push('/game')}
-              >
-                Continue
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Footer info */}
-        <div className="text-center text-sm text-muted-foreground animate-in fade-in duration-700 delay-500">
-          <p>🎮 WASD to move • E to interact • ESC to pause</p>
-          <p className="mt-2 text-xs opacity-60">
-            Powered by AI-generated content • Built with Next.js & React Three Fiber
-          </p>
+                <p className="mt-2 text-xs text-cyan-100/65">
+                  Recommended format: letters, numbers, `_` or `-` only.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  className="h-12 flex-1 bg-cyan-400 text-black hover:bg-cyan-300"
+                  onClick={handleDeploy}
+                  disabled={deploying}
+                >
+                  {deploying ? 'Deploying...' : 'Enter FPS Arena'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 flex-1 border-cyan-300/35 text-cyan-100 hover:bg-cyan-950/35"
+                  onClick={() => void loadBriefing()}
+                  disabled={loadingBriefing}
+                >
+                  {loadingBriefing ? 'Refreshing...' : 'Refresh AI Briefing'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-300/35 bg-[#17110f]/90 backdrop-blur">
+            <CardHeader>
+              <p className="font-mono text-xs uppercase tracking-[0.26em] text-amber-300">Command Uplink</p>
+              <CardTitle className="text-2xl">Live Mission Feed</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className={`rounded-lg border border-amber-300/20 bg-gradient-to-br ${difficultyMeta.accent} p-4`}>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-100/90">AI Radio</p>
+                <p className="mt-2 text-sm leading-relaxed text-amber-50">{briefing}</p>
+              </div>
+
+              <div className="rounded-lg border border-cyan-300/20 bg-cyan-950/25 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-cyan-300">Current Objective</p>
+                <p className="mt-2 text-sm text-cyan-100">{objective}</p>
+              </div>
+
+              <div className="rounded-lg border border-cyan-300/15 bg-black/20 p-4 text-xs text-cyan-100/80">
+                <p className="mb-2 font-mono uppercase tracking-[0.2em] text-cyan-300">Control Deck</p>
+                <p>Movement: `W A S D`</p>
+                <p>Aim + Fire: `Mouse + Left Click`</p>
+                <p>Reload: `R`</p>
+                <p>Pause: `Esc`</p>
+              </div>
+
+              <p className="text-xs text-amber-100/60">
+                Mode profile: {difficultyMeta.note}
+              </p>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </section>
     </main>
   );
 }
