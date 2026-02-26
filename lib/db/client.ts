@@ -1,4 +1,5 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
 import * as schema from './schema';
 
@@ -7,7 +8,8 @@ import * as schema from './schema';
 // ============================================
 
 let sqlite: Database.Database | null = null;
-let db: ReturnType<typeof drizzle> | null = null;
+type DbClient = BetterSQLite3Database<typeof schema>;
+let db: DbClient | null = null;
 
 // Try to initialize SQLite database
 // Will fail gracefully in serverless environments (Vercel, etc.)
@@ -44,13 +46,15 @@ const safeDb = {
     },
   },
   insert: db?.insert || (() => ({
-    values: async () => ({ then: (fn: any) => fn({}) }),
+    values: async () => ({}),
   })),
   update: db?.update || (() => ({
-    set: async () => ({ then: (fn: any) => fn({}) }),
+    set: () => ({
+      where: async () => ({}),
+    }),
   })),
   delete: db?.delete || (() => ({
-    where: async () => ({ then: (fn: any) => fn({}) }),
+    where: async () => ({}),
   })),
 };
 
@@ -77,4 +81,3 @@ export function isDatabaseConnected(): boolean {
     return false;
   }
 }
-
