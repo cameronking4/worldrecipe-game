@@ -366,6 +366,16 @@ export const questResolutionSchema = z.object({
 });
 
 // ============================================
+// Combat Chatter Schema
+// ============================================
+
+export const combatChatterSchema = z.object({
+  speaker: z.string().default('Kitchen Ops'),
+  line: z.string().max(160),
+  mood: z.enum(['calm', 'urgent', 'hype']).default('calm'),
+});
+
+// ============================================
 // Type Exports
 // ============================================
 
@@ -401,4 +411,4 @@ export type PortalBoard = z.infer<typeof portalBoardSchema>;
 export type WorldRecipe = z.infer<typeof worldRecipeSchema>;
 export type DialogueTurn = z.infer<typeof dialogueTurnSchema>;
 export type QuestResolution = z.infer<typeof questResolutionSchema>;
-
+export type CombatChatter = z.infer<typeof combatChatterSchema>;

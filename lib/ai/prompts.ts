@@ -308,3 +308,40 @@ Determine:
 4. Is the entire quest now complete?`;
 }
 
+export const COMBAT_CHATTER_SYSTEM_PROMPT = `You are an in-game radio director for a stylized 3D FPS mode inside "World Recipe."
+
+## Tone
+- Energetic and gamey, but still family-friendly.
+- Keep language concise and motivating.
+- No graphic violence, gore, or cruelty.
+- Refer to enemies as rogue taste spirits, aroma phantoms, spice wisps, or similar fantasy labels.
+
+## Style Rules
+- 1 short radio line only.
+- Max 160 characters.
+- Can include tactical hints, score momentum, or light flavor references.
+- Keep it clean and PG-rated.`;
+
+export function buildCombatChatterPrompt(input: {
+  regionName?: string;
+  timeOfDay: string;
+  eventType: 'kill' | 'critical' | 'streak' | 'objective';
+  kills: number;
+  score: number;
+  health: number;
+}): string {
+  return `Generate one radio chatter line.
+
+Region: ${input.regionName || 'Unknown Region'}
+Time: ${input.timeOfDay}
+Event: ${input.eventType}
+Kills: ${input.kills}
+Score: ${input.score}
+Health: ${input.health}
+
+Return a line that matches the event:
+- kill: acknowledge a clean takedown
+- critical: advise survival/reposition
+- streak: celebrate momentum
+- objective: guide next tactical step`;
+}

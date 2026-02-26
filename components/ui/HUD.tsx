@@ -5,6 +5,7 @@ import { useGameStore } from '@/lib/store/gameStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePortalStore } from '@/lib/store/portalStore';
+import { useCombatStore } from '@/lib/store/combatStore';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card } from '@/components/ui/card';
@@ -483,6 +484,49 @@ function StaminaBar() {
   );
 }
 
+function CombatStatus() {
+  const health = useCombatStore((s) => s.playerHealth);
+  const maxHealth = useCombatStore((s) => s.maxPlayerHealth);
+  const ammo = useCombatStore((s) => s.ammoInClip);
+  const reserveAmmo = useCombatStore((s) => s.reserveAmmo);
+  const kills = useCombatStore((s) => s.kills);
+  const score = useCombatStore((s) => s.score);
+  const radioSpeaker = useCombatStore((s) => s.radioSpeaker);
+  const radioMessage = useCombatStore((s) => s.radioMessage);
+
+  const hpPercent = Math.max(0, Math.min(100, (health / maxHealth) * 100));
+
+  return (
+    <Card className="hud-card px-3 py-2.5 bg-slate-900/90 backdrop-blur-md border-cyan-400/30 w-56 shadow-lg">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-cyan-200 font-semibold">HEALTH</span>
+          <span className="text-cyan-100 font-mono">{Math.round(health)}/{maxHealth}</span>
+        </div>
+        <div className="h-2 bg-slate-700/70 rounded-full overflow-hidden">
+          <div
+            className={`${hpPercent > 35 ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'} h-full transition-all duration-200`}
+            style={{ width: `${hpPercent}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-cyan-200 font-semibold">AMMO</span>
+          <span className="text-cyan-100 font-mono">{ammo}/{reserveAmmo}</span>
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-slate-200/90">
+          <span>Kills: {kills}</span>
+          <span>Score: {score}</span>
+        </div>
+        {radioMessage && (
+          <div className="text-[10px] text-cyan-100/85 bg-cyan-950/40 border border-cyan-400/20 rounded px-2 py-1">
+            <span className="font-semibold">{radioSpeaker || 'Radio'}:</span> {radioMessage}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 // ============================================
 // Dish Progress Tracker
 // ============================================
@@ -820,6 +864,18 @@ function ControlsHelp() {
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Look / Aim</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Mouse</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Fire</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">LMB</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Reload</span>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">R</kbd>
+          </div>
+          <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Sprint</span>
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Shift</kbd>
           </div>
@@ -880,19 +936,19 @@ function GettingStartedTip() {
         <div className="space-y-2 text-xs text-amber-100">
           <div className="flex items-start gap-2">
             <span className="text-amber-400">1.</span>
-            <span><strong>Explore</strong> the map with WASD or Arrow keys</span>
+            <span><strong>Click the game</strong> to lock mouse and enter FPS mode</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">2.</span>
-            <span><strong>Collect ingredients</strong> (glowing items) by pressing E or SPACE</span>
+            <span><strong>Clear spirits</strong> with Left Click and reload with R</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">3.</span>
-            <span><strong>Talk to NPCs</strong> (pink dots on map) for quests & trades</span>
+            <span><strong>Collect ingredients</strong> by pressing E near glowing pickups</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-amber-400">4.</span>
-            <span><strong>Trade</strong> with yellow-highlighted NPCs for special items</span>
+            <span><strong>Talk to NPCs</strong> for AI-driven quests, hints, and trades</span>
           </div>
         </div>
         
@@ -954,6 +1010,7 @@ export function HUD() {
       <div className="absolute top-4 left-4 space-y-2.5 pointer-events-auto">
         <TimeDisplay />
         <RegionDisplay />
+        <CombatStatus />
         <StaminaBar />
         <DishProgress />
       </div>
@@ -985,6 +1042,17 @@ export function HUD() {
       
       {/* Center Bottom - Interaction Prompt */}
       <InteractionPrompt />
+
+      {/* FPS Crosshair */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+        <div className="w-6 h-6 relative opacity-80">
+          <div className="absolute left-1/2 top-0 h-2 w-[2px] -translate-x-1/2 bg-cyan-300" />
+          <div className="absolute left-1/2 bottom-0 h-2 w-[2px] -translate-x-1/2 bg-cyan-300" />
+          <div className="absolute top-1/2 left-0 w-2 h-[2px] -translate-y-1/2 bg-cyan-300" />
+          <div className="absolute top-1/2 right-0 w-2 h-[2px] -translate-y-1/2 bg-cyan-300" />
+          <div className="absolute left-1/2 top-1/2 w-[3px] h-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-100" />
+        </div>
+      </div>
       
       {/* Decorative corner accents */}
       <div className="absolute top-0 left-0 w-32 h-32 border-l-2 border-t-2 border-primary/20 pointer-events-none" />

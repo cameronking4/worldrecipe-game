@@ -1,537 +1,350 @@
 'use client';
 
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, CapsuleCollider, RapierRigidBody } from '@react-three/rapier';
-import { RoundedBox, Trail, Sparkles, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { useGameStore } from '@/lib/store/gameStore';
+import { useWorldStore } from '@/lib/store/worldStore';
+import { useCombatStore } from '@/lib/store/combatStore';
+import { useNotificationStore } from '@/lib/store/notificationStore';
 
-// ============================================
-// Input Handler - Keyboard state using ref for real-time access
-// ============================================
 const useKeyboard = () => {
   const keysRef = useRef({
     forward: false,
     backward: false,
     left: false,
     right: false,
-    interact: false,
     sprint: false,
+    reload: false,
   });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const code = e.code;
-      const key = e.key;
-      
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code) ||
-          ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
+      if (code === 'KeyW' || code === 'ArrowUp') keysRef.current.forward = true;
+      if (code === 'KeyS' || code === 'ArrowDown') keysRef.current.backward = true;
+      if (code === 'KeyA' || code === 'ArrowLeft') keysRef.current.left = true;
+      if (code === 'KeyD' || code === 'ArrowRight') keysRef.current.right = true;
+      if (code === 'ShiftLeft' || code === 'ShiftRight') keysRef.current.sprint = true;
+      if (code === 'KeyR') keysRef.current.reload = true;
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code)) {
         e.preventDefault();
-      }
-      
-      // Forward (W or ArrowUp)
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'ArrowUp' || key === 'w' || key === 'W') {
-        keysRef.current.forward = true;
-      }
-      // Backward (S or ArrowDown)
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 'ArrowDown' || key === 's' || key === 'S') {
-        keysRef.current.backward = true;
-      }
-      // Left (A or ArrowLeft)
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'ArrowLeft' || key === 'a' || key === 'A') {
-        keysRef.current.left = true;
-      }
-      // Right (D or ArrowRight)
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'ArrowRight' || key === 'd' || key === 'D') {
-        keysRef.current.right = true;
-      }
-      // Interact (E or Space)
-      if (code === 'KeyE' || code === 'Space' || key === 'e' || key === 'E' || key === ' ') {
-        keysRef.current.interact = true;
-      }
-      // Sprint (Shift)
-      if (code === 'ShiftLeft' || code === 'ShiftRight') {
-        keysRef.current.sprint = true;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const code = e.code;
-      const key = e.key;
-      
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'ArrowUp' || key === 'w' || key === 'W') {
-        keysRef.current.forward = false;
-      }
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 'ArrowDown' || key === 's' || key === 'S') {
-        keysRef.current.backward = false;
-      }
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'ArrowLeft' || key === 'a' || key === 'A') {
-        keysRef.current.left = false;
-      }
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'ArrowRight' || key === 'd' || key === 'D') {
-        keysRef.current.right = false;
-      }
-      if (code === 'KeyE' || code === 'Space' || key === 'e' || key === 'E' || key === ' ') {
-        keysRef.current.interact = false;
-      }
-      if (code === 'ShiftLeft' || code === 'ShiftRight') {
-        keysRef.current.sprint = false;
-      }
+      if (code === 'KeyW' || code === 'ArrowUp') keysRef.current.forward = false;
+      if (code === 'KeyS' || code === 'ArrowDown') keysRef.current.backward = false;
+      if (code === 'KeyA' || code === 'ArrowLeft') keysRef.current.left = false;
+      if (code === 'KeyD' || code === 'ArrowRight') keysRef.current.right = false;
+      if (code === 'ShiftLeft' || code === 'ShiftRight') keysRef.current.sprint = false;
+      if (code === 'KeyR') keysRef.current.reload = false;
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     window.addEventListener('keyup', handleKeyUp, { capture: true });
-    document.addEventListener('keydown', handleKeyDown, { capture: true });
-    document.addEventListener('keyup', handleKeyUp, { capture: true });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
       window.removeEventListener('keyup', handleKeyUp, { capture: true });
-      document.removeEventListener('keydown', handleKeyDown, { capture: true });
-      document.removeEventListener('keyup', handleKeyUp, { capture: true });
     };
   }, []);
 
   return keysRef;
 };
 
-// ============================================
-// Enhanced Player Visual - Better character model
-// ============================================
-function PlayerVisual({ isMoving, isSprinting }: { isMoving: boolean; isSprinting: boolean }) {
-  const meshRef = useRef<THREE.Group>(null);
-  const bobOffset = useRef(0);
-  const armLeftRef = useRef<THREE.Group>(null);
-  const armRightRef = useRef<THREE.Group>(null);
-  const legLeftRef = useRef<THREE.Group>(null);
-  const legRightRef = useRef<THREE.Group>(null);
-  
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    
-    const bobSpeed = isSprinting ? 15 : 10;
-    const bobAmount = isSprinting ? 0.08 : 0.05;
-    
-    // Bobbing animation when moving
-    if (isMoving) {
-      bobOffset.current += delta * bobSpeed;
-      meshRef.current.position.y = Math.sin(bobOffset.current) * bobAmount;
-      
-      // Arm swing
-      if (armLeftRef.current && armRightRef.current) {
-        const armSwing = Math.sin(bobOffset.current) * 0.4;
-        armLeftRef.current.rotation.x = armSwing;
-        armRightRef.current.rotation.x = -armSwing;
-      }
-      
-      // Leg swing
-      if (legLeftRef.current && legRightRef.current) {
-        const legSwing = Math.sin(bobOffset.current) * 0.3;
-        legLeftRef.current.rotation.x = -legSwing;
-        legRightRef.current.rotation.x = legSwing;
-      }
-    } else {
-      meshRef.current.position.y = THREE.MathUtils.lerp(
-        meshRef.current.position.y,
-        0,
-        delta * 5
-      );
-      
-      // Idle breathing animation
-      const breathe = Math.sin(state.clock.elapsedTime * 2) * 0.02;
-      meshRef.current.scale.y = 1 + breathe;
-      
-      // Reset arm/leg positions
-      if (armLeftRef.current) armLeftRef.current.rotation.x = THREE.MathUtils.lerp(armLeftRef.current.rotation.x, 0, delta * 5);
-      if (armRightRef.current) armRightRef.current.rotation.x = THREE.MathUtils.lerp(armRightRef.current.rotation.x, 0, delta * 5);
-      if (legLeftRef.current) legLeftRef.current.rotation.x = THREE.MathUtils.lerp(legLeftRef.current.rotation.x, 0, delta * 5);
-      if (legRightRef.current) legRightRef.current.rotation.x = THREE.MathUtils.lerp(legRightRef.current.rotation.x, 0, delta * 5);
+function FirstPersonViewModel() {
+  const weaponRef = useRef<THREE.Group>(null);
+  const muzzleRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
+  const isMoving = usePlayerStore((s) => s.isMoving);
+  const muzzleFlashUntil = useCombatStore((s) => s.muzzleFlashUntil);
+
+  useFrame((state) => {
+    if (!weaponRef.current) return;
+
+    const bob = isMoving ? Math.sin(state.clock.elapsedTime * 9) * 0.02 : 0;
+    const recoil = performance.now() < muzzleFlashUntil ? 0.05 : 0;
+
+    weaponRef.current.position.copy(camera.position);
+    weaponRef.current.quaternion.copy(camera.quaternion);
+    weaponRef.current.translateX(0.22);
+    weaponRef.current.translateY(-0.18 + bob);
+    weaponRef.current.translateZ(-0.35 - recoil);
+
+    if (muzzleRef.current) {
+      muzzleRef.current.visible = performance.now() < muzzleFlashUntil;
     }
   });
-  
+
   return (
-    <group ref={meshRef}>
-      {/* Body */}
-      <RoundedBox
-        args={[0.55, 0.75, 0.45]}
-        radius={0.12}
-        smoothness={4}
-        position={[0, 0.4, 0]}
-        castShadow
-      >
-        <meshStandardMaterial 
-          color="#FF6B6B" 
-          roughness={0.6}
-          metalness={0.1}
-        />
-      </RoundedBox>
-      
-      {/* Apron detail */}
-      <RoundedBox
-        args={[0.5, 0.5, 0.1]}
-        radius={0.05}
-        smoothness={4}
-        position={[0, 0.35, 0.22]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFFFFF" roughness={0.7} />
-      </RoundedBox>
-      
-      {/* Head */}
-      <RoundedBox
-        args={[0.45, 0.45, 0.4]}
-        radius={0.1}
-        smoothness={4}
-        position={[0, 0.98, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-      </RoundedBox>
-      
-      {/* Eyes */}
-      <mesh position={[-0.12, 1.02, 0.18]} castShadow>
-        <boxGeometry args={[0.1, 0.1, 0.06]} />
-        <meshStandardMaterial color="#2D2D2D" />
+    <group ref={weaponRef}>
+      <mesh castShadow>
+        <boxGeometry args={[0.16, 0.12, 0.7]} />
+        <meshStandardMaterial color="#3b3f51" roughness={0.7} metalness={0.2} />
       </mesh>
-      <mesh position={[0.12, 1.02, 0.18]} castShadow>
-        <boxGeometry args={[0.1, 0.1, 0.06]} />
-        <meshStandardMaterial color="#2D2D2D" />
+      <mesh position={[0, 0.06, -0.12]} castShadow>
+        <boxGeometry args={[0.1, 0.05, 0.28]} />
+        <meshStandardMaterial color="#6366f1" roughness={0.5} metalness={0.3} emissive="#6366f1" emissiveIntensity={0.2} />
       </mesh>
-      
-      {/* Eye highlights */}
-      <mesh position={[-0.1, 1.04, 0.2]}>
-        <boxGeometry args={[0.03, 0.03, 0.02]} />
-        <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.3} />
+      <mesh position={[0, -0.08, 0.16]} castShadow rotation={[0.4, 0, 0]}>
+        <boxGeometry args={[0.09, 0.18, 0.12]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.8} />
       </mesh>
-      <mesh position={[0.14, 1.04, 0.2]}>
-        <boxGeometry args={[0.03, 0.03, 0.02]} />
-        <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.3} />
-      </mesh>
-      
-      {/* Rosy cheeks */}
-      <mesh position={[-0.18, 0.95, 0.15]}>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#FFB6C1" transparent opacity={0.6} />
-      </mesh>
-      <mesh position={[0.18, 0.95, 0.15]}>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#FFB6C1" transparent opacity={0.6} />
-      </mesh>
-      
-      {/* Smile */}
-      <mesh position={[0, 0.9, 0.19]}>
-        <boxGeometry args={[0.12, 0.03, 0.02]} />
-        <meshStandardMaterial color="#C67B5C" />
-      </mesh>
-      
-      {/* Chef's Hat (toque) */}
-      <RoundedBox
-        args={[0.4, 0.35, 0.35]}
-        radius={0.06}
-        smoothness={4}
-        position={[0, 1.35, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
-      </RoundedBox>
-      <mesh position={[0, 1.58, 0]} castShadow>
-        <cylinderGeometry args={[0.18, 0.2, 0.2, 8]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
-      </mesh>
-      {/* Hat band */}
-      <mesh position={[0, 1.2, 0]}>
-        <cylinderGeometry args={[0.22, 0.22, 0.05, 8]} />
-        <meshStandardMaterial color="#FFD700" roughness={0.3} metalness={0.5} />
-      </mesh>
-      
-      {/* Arms */}
-      <group ref={armLeftRef} position={[-0.38, 0.45, 0]}>
-        <RoundedBox
-          args={[0.18, 0.45, 0.18]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-        </RoundedBox>
-      </group>
-      <group ref={armRightRef} position={[0.38, 0.45, 0]}>
-        <RoundedBox
-          args={[0.18, 0.45, 0.18]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#FFE4C9" roughness={0.5} />
-        </RoundedBox>
-      </group>
-      
-      {/* Legs */}
-      <group ref={legLeftRef} position={[-0.14, 0, 0]}>
-        <RoundedBox
-          args={[0.2, 0.3, 0.2]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#4A4A4A" roughness={0.7} />
-        </RoundedBox>
-        {/* Shoe */}
-        <mesh position={[0, -0.25, 0.05]} castShadow>
-          <boxGeometry args={[0.2, 0.1, 0.25]} />
-          <meshStandardMaterial color="#8B4513" roughness={0.8} />
-        </mesh>
-      </group>
-      <group ref={legRightRef} position={[0.14, 0, 0]}>
-        <RoundedBox
-          args={[0.2, 0.3, 0.2]}
-          radius={0.04}
-          smoothness={4}
-          position={[0, -0.1, 0]}
-          castShadow
-        >
-          <meshStandardMaterial color="#4A4A4A" roughness={0.7} />
-        </RoundedBox>
-        {/* Shoe */}
-        <mesh position={[0, -0.25, 0.05]} castShadow>
-          <boxGeometry args={[0.2, 0.1, 0.25]} />
-          <meshStandardMaterial color="#8B4513" roughness={0.8} />
-        </mesh>
-      </group>
-      
-      {/* Movement particles when sprinting */}
-      {isSprinting && (
-        <Sparkles 
-          count={15}
-          scale={[1, 0.5, 1]}
-          size={1.5}
-          speed={2}
-          opacity={0.6}
-          color="#FFD700"
-          position={[0, 0.2, -0.3]}
-        />
-      )}
-      
-      {/* Ambient sparkles around player - always visible */}
-      <Sparkles 
-        count={8}
-        scale={[1.5, 2, 1.5]}
-        size={0.8}
-        speed={0.3}
-        opacity={0.4}
-        color="#FFFFFF"
-        position={[0, 1, 0]}
-      />
-      
-      {/* Player halo/glow ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <ringGeometry args={[0.5, 0.6, 16]} />
-        <meshBasicMaterial 
-          color="#FFD700" 
-          transparent 
-          opacity={0.3}
-          side={THREE.DoubleSide}
-        />
+      <mesh ref={muzzleRef} position={[0, 0, -0.4]} visible={false}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.4} transparent opacity={0.9} />
       </mesh>
     </group>
   );
 }
 
-// ============================================
-// Camera Follow Logic - MUCH CLOSER & SMOOTHER
-// ============================================
-function useCameraFollow(targetPosition: THREE.Vector3, isMoving: boolean) {
-  const { camera } = useThree();
-  
-  // MUCH CLOSER camera offset for immersive feel
-  const baseOffset = useMemo(() => new THREE.Vector3(4, 5, 4), []);
-  const cameraOffset = useRef(baseOffset.clone());
-  const smoothPosition = useRef(new THREE.Vector3());
-  const lookAtTarget = useRef(new THREE.Vector3());
-  const shakeOffset = useRef(new THREE.Vector3());
-  
-  useEffect(() => {
-    // Initialize camera position
-    smoothPosition.current.copy(targetPosition).add(baseOffset);
-    camera.position.copy(smoothPosition.current);
-  }, [camera, targetPosition, baseOffset]);
-  
-  useFrame((state, delta) => {
-    // Clamp delta to prevent huge jumps
-    const clampedDelta = Math.min(delta, 0.1);
-    
-    // Dynamic camera offset - slightly closer when moving
-    const dynamicOffset = baseOffset.clone();
-    if (isMoving) {
-      dynamicOffset.multiplyScalar(0.95);
-    }
-    
-    // Subtle camera shake when moving
-    if (isMoving) {
-      shakeOffset.current.set(
-        Math.sin(state.clock.elapsedTime * 15) * 0.02,
-        Math.sin(state.clock.elapsedTime * 20) * 0.01,
-        Math.cos(state.clock.elapsedTime * 15) * 0.02
-      );
-    } else {
-      shakeOffset.current.lerp(new THREE.Vector3(), clampedDelta * 5);
-    }
-    
-    // Target camera position
-    const targetCamPos = targetPosition.clone()
-      .add(dynamicOffset)
-      .add(shakeOffset.current);
-    
-    // Very smooth camera movement
-    smoothPosition.current.lerp(targetCamPos, clampedDelta * 4);
-    camera.position.copy(smoothPosition.current);
-    
-    // Smooth look-at with slight lead
-    const lookAhead = isMoving ? 0.5 : 0;
-    const targetLookAt = targetPosition.clone();
-    targetLookAt.y += 0.8; // Look at character's head level
-    
-    lookAtTarget.current.lerp(targetLookAt, clampedDelta * 6);
-    camera.lookAt(lookAtTarget.current);
-  });
-}
-
-// ============================================
-// Main Player Controller
-// ============================================
 export function PlayerController() {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
-  const playerGroupRef = useRef<THREE.Group>(null);
   const keysRef = useKeyboard();
-  
+  const { camera, gl } = useThree();
+
   const setPosition = usePlayerStore((s) => s.setPosition);
   const setRotation = usePlayerStore((s) => s.setRotation);
   const setMoving = usePlayerStore((s) => s.setMoving);
   const isMoving = usePlayerStore((s) => s.isMoving);
+  const consumeStamina = usePlayerStore((s) => s.useStamina);
+  const restoreStamina = usePlayerStore((s) => s.restoreStamina);
+
   const isPaused = useGameStore((s) => s.isPaused);
   const dialogueActive = useGameStore((s) => s.dialogueState.active);
   const advanceTime = useGameStore((s) => s.advanceTime);
-  
-  // Movement settings - INCREASED for better feel
-  const baseMoveSpeed = 6;
-  const sprintMultiplier = 1.6;
-  const rotationSpeed = 10;
-  
-  // Current position for camera follow
-  const currentPosition = useRef(new THREE.Vector3(0, 0.5, 0));
-  const isSprinting = useRef(false);
-  
-  // Camera follow
-  useCameraFollow(currentPosition.current, isMoving);
-  
+  const timeOfDay = useGameStore((s) => s.timeOfDay);
+
+  const world = useWorldStore((s) => s.world);
+  const region = useWorldStore((s) => s.currentRegion);
+
+  const playerHealth = useCombatStore((s) => s.playerHealth);
+  const shoot = useCombatStore((s) => s.shoot);
+  const reload = useCombatStore((s) => s.reload);
+  const setRadioMessage = useCombatStore((s) => s.setRadioMessage);
+  const resetForDeath = useCombatStore((s) => s.resetForDeath);
+  const kills = useCombatStore((s) => s.kills);
+  const score = useCombatStore((s) => s.score);
+
+  const yawRef = useRef(0);
+  const pitchRef = useRef(0);
+  const pointerLockedRef = useRef(false);
+  const lastShotAtRef = useRef(0);
+  const lastAIChatterAtRef = useRef(0);
+
+  const moveSpeed = 7.8;
+  const sprintMultiplier = 1.5;
+
+  const canControl = useMemo(() => !isPaused && !dialogueActive, [isPaused, dialogueActive]);
+
+  useEffect(() => {
+    const onPointerLockChange = () => {
+      pointerLockedRef.current = document.pointerLockElement === gl.domElement;
+    };
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (!pointerLockedRef.current || !canControl) return;
+
+      yawRef.current -= event.movementX * 0.0026;
+      pitchRef.current -= event.movementY * 0.0022;
+      pitchRef.current = Math.max(-Math.PI / 2 + 0.02, Math.min(Math.PI / 2 - 0.02, pitchRef.current));
+    };
+
+    const onMouseDown = async (event: MouseEvent) => {
+      if (!canControl) return;
+
+      if (!pointerLockedRef.current) {
+        gl.domElement.requestPointerLock();
+        return;
+      }
+
+      if (event.button !== 0) return;
+
+      const now = performance.now();
+      if (now - lastShotAtRef.current < 110) return;
+      lastShotAtRef.current = now;
+
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      const result = shoot(
+        [camera.position.x, camera.position.y, camera.position.z],
+        [direction.x, direction.y, direction.z],
+        now,
+      );
+
+      if (result.killed && world && region && now - lastAIChatterAtRef.current > 8000) {
+        lastAIChatterAtRef.current = now;
+        try {
+          const response = await fetch('/api/ai/combat/chatter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              worldId: world.worldId,
+              regionId: region.regionId,
+              timeOfDay,
+              playerState: {
+                kills: kills + 1,
+                score: score + 120,
+                health: playerHealth,
+              },
+              eventType: 'kill',
+            }),
+          });
+
+          const data = await response.json();
+          if (data?.line) {
+            setRadioMessage(data.speaker || 'Kitchen Ops', data.line);
+          }
+        } catch {
+          setRadioMessage('Kitchen Ops', 'Confirmed hit. Keep pushing forward.');
+        }
+      }
+    };
+
+    const onContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'KeyR') {
+        reload();
+      }
+    };
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [camera, canControl, gl.domElement, kills, playerHealth, region, reload, score, setRadioMessage, shoot, timeOfDay, world]);
+
+  useEffect(() => {
+    if (!canControl && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }, [canControl]);
+
+  useEffect(() => {
+    if (playerHealth > 0) return;
+
+    useNotificationStore.getState().showError('You were overwhelmed', 'Respawning at base position.');
+    resetForDeath();
+    if (rigidBodyRef.current) {
+      rigidBodyRef.current.setTranslation({ x: 0, y: 1, z: 0 }, true);
+      rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    }
+    setRadioMessage('Kitchen Ops', 'Respawn complete. Re-engage targets and stay mobile.');
+  }, [playerHealth, resetForDeath, setRadioMessage]);
+
   useFrame((_, delta) => {
     if (!rigidBodyRef.current) return;
-    
-    if (!Number.isFinite(delta) || delta <= 0 || delta > 0.1) {
-      delta = 0.016;
-    }
-    
-    const canMove = !isPaused && !dialogueActive;
-    
+
+    const step = Number.isFinite(delta) ? Math.min(delta, 0.05) : 0.016;
+
     if (!isPaused) {
-      advanceTime(delta);
+      advanceTime(step);
     }
-    
+
+    const currentPosition = rigidBodyRef.current.translation();
+    const currentVel = rigidBodyRef.current.linvel();
+    if (!currentPosition || !currentVel) return;
+
+    camera.position.set(currentPosition.x, currentPosition.y + 0.52, currentPosition.z);
+    camera.rotation.set(pitchRef.current, yawRef.current, 0, 'YXZ');
+
     const keys = keysRef.current;
-    isSprinting.current = keys.sprint && canMove;
-    
     let moveX = 0;
     let moveZ = 0;
-    
-    if (canMove) {
-      if (keys.forward) moveZ -= 1;
-      if (keys.backward) moveZ += 1;
-      if (keys.left) moveX -= 1;
+
+    if (canControl) {
+      if (keys.forward) moveZ += 1;
+      if (keys.backward) moveZ -= 1;
       if (keys.right) moveX += 1;
+      if (keys.left) moveX -= 1;
     }
-    
-    // Normalize diagonal movement
-    const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    if (length > 0) {
-      moveX /= length;
-      moveZ /= length;
+
+    const inputLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
+    const moving = inputLength > 0;
+
+    let normalizedX = 0;
+    let normalizedZ = 0;
+    if (moving) {
+      normalizedX = moveX / inputLength;
+      normalizedZ = moveZ / inputLength;
     }
-    
-    // Calculate speed
-    const currentSpeed = baseMoveSpeed * (isSprinting.current ? sprintMultiplier : 1);
-    
-    try {
-      const currentVel = rigidBodyRef.current.linvel();
-      if (currentVel && Number.isFinite(currentVel.y)) {
-        rigidBodyRef.current.setLinvel(
-          {
-            x: moveX * currentSpeed,
-            y: currentVel.y,
-            z: moveZ * currentSpeed,
-          },
-          true
-        );
-      }
-      
-      const position = rigidBodyRef.current.translation();
-      if (position && Number.isFinite(position.x) && Number.isFinite(position.y) && Number.isFinite(position.z)) {
-        currentPosition.current.set(position.x, position.y, position.z);
-        setPosition([position.x, position.y, position.z]);
-      }
-    } catch (e) {
-      console.debug('Physics not ready:', e);
-      return;
+
+    const forwardX = -Math.sin(yawRef.current);
+    const forwardZ = -Math.cos(yawRef.current);
+    const rightX = Math.cos(yawRef.current);
+    const rightZ = -Math.sin(yawRef.current);
+
+    let worldMoveX = rightX * normalizedX + forwardX * normalizedZ;
+    let worldMoveZ = rightZ * normalizedX + forwardZ * normalizedZ;
+
+    const worldMoveLength = Math.sqrt(worldMoveX * worldMoveX + worldMoveZ * worldMoveZ);
+    if (worldMoveLength > 0) {
+      worldMoveX /= worldMoveLength;
+      worldMoveZ /= worldMoveLength;
     }
-    
-    // Update moving state
-    const moving = length > 0;
+
+    const wantsSprint = moving && keys.sprint && canControl;
+    const canSprint = wantsSprint ? consumeStamina(step * 8) : false;
+    if (!wantsSprint) {
+      restoreStamina(step * 10);
+    }
+
+    const speed = moveSpeed * (canSprint ? sprintMultiplier : 1);
+
+    rigidBodyRef.current.setLinvel(
+      {
+        x: worldMoveX * speed,
+        y: currentVel.y,
+        z: worldMoveZ * speed,
+      },
+      true,
+    );
+
+    setPosition([currentPosition.x, currentPosition.y, currentPosition.z]);
+    setRotation(yawRef.current);
+
     if (moving !== isMoving) {
       setMoving(moving);
     }
-    
-    // Rotate player to face movement direction
-    if (length > 0 && playerGroupRef.current) {
-      const targetRotation = Math.atan2(moveX, moveZ);
-      const currentRotation = playerGroupRef.current.rotation.y;
-      
-      let rotationDiff = targetRotation - currentRotation;
-      
-      while (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
-      while (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
-      
-      playerGroupRef.current.rotation.y += rotationDiff * delta * rotationSpeed;
-      setRotation(playerGroupRef.current.rotation.y);
+
+    if (playerHealth < 35 && performance.now() - lastAIChatterAtRef.current > 12000) {
+      lastAIChatterAtRef.current = performance.now();
+      setRadioMessage('Kitchen Ops', 'Critical health. Break line of sight and recover.');
     }
   });
-  
+
   return (
-    <RigidBody
-      ref={rigidBodyRef}
-      position={[0, 1, 0]}
-      enabledRotations={[false, false, false]}
-      linearDamping={6}
-      angularDamping={6}
-      colliders={false}
-      mass={1}
-    >
-      <CapsuleCollider args={[0.35, 0.3]} position={[0, 0.65, 0]} />
-      <group ref={playerGroupRef}>
-        <PlayerVisual isMoving={isMoving} isSprinting={isSprinting.current} />
-        
-        {/* Player indicator light */}
-        <pointLight 
-          position={[0, 1.8, 0]} 
-          color="#FFD700" 
-          intensity={0.3} 
-          distance={3}
-        />
-      </group>
-    </RigidBody>
+    <>
+      <RigidBody
+        ref={rigidBodyRef}
+        position={[0, 1, 0]}
+        enabledRotations={[false, false, false]}
+        linearDamping={7}
+        angularDamping={8}
+        colliders={false}
+        mass={1}
+      >
+        <CapsuleCollider args={[0.45, 0.34]} position={[0, 0.5, 0]} />
+      </RigidBody>
+      <FirstPersonViewModel />
+    </>
   );
 }
 

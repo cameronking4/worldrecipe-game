@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useCallback, useRef, useMemo } from 'react';
-import { normalizePosition } from '@/types/game';
+import { normalizePosition, type POI } from '@/types/game';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { 
   Stars,
@@ -25,10 +25,12 @@ import { VoxelTerrain } from './VoxelTerrain';
 import { NPCManager } from './NPCController';
 import { InteractableManager } from './Interactable';
 import { PortalBoard } from './PortalBoard';
+import { CombatEncounter } from './CombatEncounter';
 import { useGameStore } from '@/lib/store/gameStore';
 import { useWorldStore } from '@/lib/store/worldStore';
 import { usePlayerStore } from '@/lib/store/playerStore';
 import { usePortalStore } from '@/lib/store/portalStore';
+import { useCombatStore } from '@/lib/store/combatStore';
 
 // ============================================
 // Post-Processing Effects
@@ -470,6 +472,14 @@ function WorldContent() {
   const checkAndUpdateTalkObjectives = usePlayerStore((s) => s.checkAndUpdateTalkObjectives);
   const showInteractionPrompt = useGameStore((s) => s.showInteractionPrompt);
   const hideInteractionPrompt = useGameStore((s) => s.hideInteractionPrompt);
+  const initializeRegionCombat = useCombatStore((s) => s.initializeRegion);
+
+  useEffect(() => {
+    if (!world || !region || isInPortal) return;
+    const mapWidth = region?.mapSpec?.grid?.width || 50;
+    const mapHeight = region?.mapSpec?.grid?.height || 50;
+    initializeRegionCombat(region.regionId, world.seed, mapWidth, mapHeight);
+  }, [world, region, isInPortal, initializeRegionCombat]);
   
   const handleNPCInteract = useCallback((npcId: string) => {
     const npc = world?.npcRoster.find((n) => n.npcId === npcId);
@@ -502,7 +512,7 @@ function WorldContent() {
     }
   }, [world, addItem]);
   
-  const handlePortalInteract = useCallback(async (poi: any) => {
+  const handlePortalInteract = useCallback(async (poi: POI) => {
     if (poi.type !== 'portal') return;
     
     // Check if it's a return portal
@@ -597,6 +607,9 @@ function WorldContent() {
         mapWidth={mapWidth}
         mapHeight={mapHeight}
       />
+
+      {/* FPS encounter layer */}
+      <CombatEncounter />
       
       {/* Portal interaction handler */}
       <PortalInteractionHandler onPortalInteract={handlePortalInteract} />
@@ -608,7 +621,7 @@ function WorldContent() {
 // Portal Interaction Handler
 // ============================================
 
-function PortalInteractionHandler({ onPortalInteract }: { onPortalInteract: (poi: any) => void }) {
+function PortalInteractionHandler({ onPortalInteract }: { onPortalInteract: (poi: POI) => void }) {
   const world = useWorldStore((s) => s.world);
   const region = useWorldStore((s) => s.currentRegion);
   const isInPortal = usePortalStore((s) => s.isInPortal);
@@ -619,7 +632,7 @@ function PortalInteractionHandler({ onPortalInteract }: { onPortalInteract: (poi
   const canAccessPortal = usePortalStore((s) => s.canAccessPortal);
   
   useEffect(() => {
-    let currentPoi: any = null;
+    let currentPoi: POI | null = null;
     let handleKeyDown: ((e: KeyboardEvent) => void) | null = null;
     
     const checkPortalProximity = () => {
@@ -629,7 +642,7 @@ function PortalInteractionHandler({ onPortalInteract }: { onPortalInteract: (poi
       }
       
       // Get POIs based on current location
-      let pois: any[] = [];
+      let pois: POI[] = [];
       if (isInPortal && portalBoard) {
         pois = portalBoard.mapSpec.pois || [];
       } else if (region) {
