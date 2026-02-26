@@ -146,10 +146,8 @@ export const usePortalStore = create<PortalState>((set, get) => ({
       return true;
     } catch (error) {
       console.error('Error entering portal:', error);
+      set({ isTransitioning: false });
       return false;
-    } finally {
-      // Transition completes after animation (handled by transition component)
-      // set({ isTransitioning: false });
     }
   },
   
@@ -213,10 +211,8 @@ export const usePortalStore = create<PortalState>((set, get) => ({
       return true;
     } catch (error) {
       console.error('Error returning to hub:', error);
+      set({ isTransitioning: false });
       return false;
-    } finally {
-      // Transition completes after animation
-      // set({ isTransitioning: false });
     }
   },
   
